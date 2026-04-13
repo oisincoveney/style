@@ -49,9 +49,9 @@ async function scaffoldTypeScript(
 
   const template = answers.framework ?? 'react'
   const kind = answers.variant === 'ts-library' ? 'vite:library' : 'vite:application'
-  const cmd = `vp create ${kind} --template ${template} --directory ${answers.projectName} --agent claude`
+  const cmd = `vp create ${kind} --template ${template} --directory ${answers.projectName} --no-interactive --agent claude`
   p.log.step(`Running: ${cmd}`)
-  execSync(cmd, { cwd, stdio: 'inherit' })
+  execSync(cmd, { cwd, stdio: 'pipe' })
   return projectDir
 }
 
@@ -60,9 +60,9 @@ async function scaffoldTsMonorepo(
   projectDir: string,
   answers: Answers,
 ): Promise<string> {
-  const rootCmd = `vp create vite:monorepo --directory ${answers.projectName} --agent claude`
+  const rootCmd = `vp create vite:monorepo --directory ${answers.projectName} --package-manager ${answers.packageManager} --no-interactive --agent claude`
   p.log.step(`Running: ${rootCmd}`)
-  execSync(rootCmd, { cwd, stdio: 'inherit' })
+  execSync(rootCmd, { cwd, stdio: 'pipe' })
 
   await seedInitialPackagesTs(projectDir)
   return projectDir
@@ -93,9 +93,9 @@ async function seedInitialPackagesTs(monorepoDir: string): Promise<void> {
     })
     if (p.isCancel(name)) return
 
-    const cmd = `vp create vite:${kind} --directory packages/${name}`
+    const cmd = `vp create vite:${kind} --directory packages/${name} --no-interactive --agent claude`
     p.log.step(`Running: ${cmd}`)
-    execSync(cmd, { cwd: monorepoDir, stdio: 'inherit' })
+    execSync(cmd, { cwd: monorepoDir, stdio: 'pipe' })
   }
 }
 
@@ -107,7 +107,7 @@ async function scaffoldRust(projectDir: string, answers: Answers): Promise<strin
   }
   const flag = answers.variant === 'rust-lib' ? '--lib' : '--bin'
   p.log.step(`Running: cargo init ${flag}`)
-  execSync(`cargo init ${flag}`, { cwd: projectDir, stdio: 'inherit' })
+  execSync(`cargo init ${flag}`, { cwd: projectDir, stdio: 'pipe' })
   return projectDir
 }
 
@@ -152,7 +152,7 @@ edition = "2024"
     p.log.step(`Running: cargo new ${flag} crates/${name}`)
     execSync(`cargo new ${flag} crates/${name}`, {
       cwd: projectDir,
-      stdio: 'inherit',
+      stdio: 'pipe',
     })
   }
 }
@@ -165,13 +165,13 @@ async function scaffoldGo(projectDir: string, answers: Answers): Promise<string>
   }
   const modulePath = answers.framework ?? `example.com/${answers.projectName}`
   p.log.step(`Running: go mod init ${modulePath}`)
-  execSync(`go mod init ${modulePath}`, { cwd: projectDir, stdio: 'inherit' })
+  execSync(`go mod init ${modulePath}`, { cwd: projectDir, stdio: 'pipe' })
   return projectDir
 }
 
 async function scaffoldGoWorkspace(projectDir: string): Promise<string> {
   p.log.step('Running: go work init')
-  execSync('go work init', { cwd: projectDir, stdio: 'inherit' })
+  execSync('go work init', { cwd: projectDir, stdio: 'pipe' })
 
   const addNow = await p.confirm({
     message: 'Add initial modules to the workspace now?',
@@ -196,7 +196,7 @@ async function scaffoldGoWorkspace(projectDir: string): Promise<string> {
     p.log.step(`Running: go mod init ${modulePath}`)
     execSync(`go mod init ${modulePath}`, { cwd: dir, stdio: 'inherit' })
     p.log.step(`Running: go work use ./${name}`)
-    execSync(`go work use ./${name}`, { cwd: projectDir, stdio: 'inherit' })
+    execSync(`go work use ./${name}`, { cwd: projectDir, stdio: 'pipe' })
   }
 }
 
