@@ -47,11 +47,13 @@ async function scaffoldTypeScript(
     return scaffoldTsMonorepo(cwd, projectDir, answers)
   }
 
-  const template = answers.framework ?? 'react'
   const kind = answers.variant === 'ts-library' ? 'vite:library' : 'vite:application'
-  const cmd = `vp create ${kind} --template ${template} --directory ${answers.projectName} --no-interactive --agent claude`
+  const isLibrary = kind === 'vite:library'
+  const templateFlag = !isLibrary && answers.framework ? ` -- --template ${answers.framework}` : ''
+  const nonInteractiveFlag = isLibrary ? ' --no-interactive' : ''
+  const cmd = `vp create ${kind} --directory ${answers.projectName}${nonInteractiveFlag} --agent claude${templateFlag}`
   p.log.step(`Running: ${cmd}`)
-  execSync(cmd, { cwd, stdio: 'pipe' })
+  execSync(cmd, { cwd, stdio: isLibrary ? 'pipe' : 'inherit' })
   return projectDir
 }
 
@@ -93,9 +95,11 @@ async function seedInitialPackagesTs(monorepoDir: string): Promise<void> {
     })
     if (p.isCancel(name)) return
 
-    const cmd = `vp create vite:${kind} --directory packages/${name} --no-interactive --agent claude`
+    const isApplication = kind === 'application'
+    const nonInteractiveFlag = isApplication ? '' : ' --no-interactive'
+    const cmd = `vp create vite:${kind} --directory packages/${name}${nonInteractiveFlag} --agent claude`
     p.log.step(`Running: ${cmd}`)
-    execSync(cmd, { cwd: monorepoDir, stdio: 'pipe' })
+    execSync(cmd, { cwd: monorepoDir, stdio: isApplication ? 'inherit' : 'pipe' })
   }
 }
 
