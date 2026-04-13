@@ -1,34 +1,38 @@
 {
-  "name": "@oisincoveney/style",
-  "version": "0.1.0",
-  "description": "Frontend TypeScript style enforcement for AI coding tools",
+  "name": "@oisincoveney/dev",
+  "version": "0.2.0",
+  "description": "Opinionated AI dev environment for multi-language projects — hooks, configs, skills, and workflow enforcement",
   "type": "module",
-  "main": "./dist/rules.mjs",
+  "main": "./dist/index.mjs",
   "exports": {
-    ".": "./dist/rules.mjs"
+    ".": "./dist/index.mjs"
   },
   "bin": {
-    "oisin-style": "./dist/cli.mjs"
+    "oisin-dev": "dist/cli.mjs"
   },
   "files": [
     "dist",
     "templates"
   ],
   "scripts": {
-    "build": "bun build src/cli.ts --outfile dist/cli.mjs --target node && bun build src/rules.ts --outfile dist/rules.mjs --target node",
+    "build": "bun build src/cli.ts --outfile dist/cli.mjs --target node && bun build src/index.ts --outfile dist/index.mjs --target node",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "bun run build"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/oisincoveney/style.git"
+    "url": "git+https://github.com/oisincoveney/dev.git"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.9.1"
   },
   "devDependencies": {
     "vitest": "^3.1.1",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "@types/node": "^22.10.5"
   }
 }

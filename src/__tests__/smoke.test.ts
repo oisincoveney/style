@@ -1,0 +1,230 @@
+import { describe, expect, it } from 'vitest'
+import type { DevConfig } from '../config.js'
+import { generateClaudeSettings } from '../generate/claude-settings.js'
+import { generateCodexHooks } from '../generate/codex-hooks.js'
+import { generateCursorRules } from '../generate/cursor-rules.js'
+import { generateLefthook } from '../generate/lefthook.js'
+import { generateLintConfig } from '../generate/lint-config.js'
+import { generateClaudeMd } from '../generate/markdown.js'
+import { RULE_SKILLS, SUPERPOWER_SKILLS, skillsForVariant } from '../skills.js'
+
+const tsFrontendConfig: DevConfig = {
+  language: 'typescript',
+  variant: 'ts-frontend',
+  framework: 'react',
+  packageManager: 'bun',
+  commands: {
+    dev: 'vp dev',
+    build: 'vp build',
+    test: 'vp test',
+    typecheck: 'vp check',
+    lint: 'vp check',
+    format: 'vp check',
+  },
+  skills: RULE_SKILLS.map((s) => s.id),
+  tools: ['beads', 'contract-driven'],
+  workflow: 'idd',
+  contractDriven: true,
+  targets: ['claude', 'codex', 'cursor', 'lefthook'],
+}
+
+const rustConfig: DevConfig = {
+  language: 'rust',
+  variant: 'rust-bin',
+  framework: null,
+  packageManager: 'cargo',
+  commands: {
+    dev: 'cargo run',
+    build: 'cargo build --release',
+    test: 'cargo test',
+    typecheck: 'cargo check',
+    lint: 'cargo clippy --all-targets -- -D warnings',
+    format: 'cargo fmt',
+  },
+  skills: ['code-quality', 'architecture', 'testing', 'ai-behavior', 'performance'],
+  tools: ['beads'],
+  workflow: 'gsd',
+  contractDriven: false,
+  targets: ['claude', 'lefthook'],
+}
+
+const goConfig: DevConfig = {
+  ...rustConfig,
+  language: 'go',
+  variant: 'go-bin',
+  packageManager: 'go',
+  commands: {
+    dev: 'go run .',
+    build: 'go build ./...',
+    test: 'go test ./...',
+    typecheck: 'go vet ./...',
+    lint: 'golangci-lint run',
+    format: 'gofmt -w .',
+  },
+  workflow: 'none',
+}
+
+describe('skills registry', () => {
+  it('has non-empty rule and superpower registries', () => {
+    expect(RULE_SKILLS.length).toBeGreaterThan(0)
+    expect(SUPERPOWER_SKILLS.length).toBeGreaterThan(0)
+  })
+
+  it('filters skills by variant', () => {
+    const ts = skillsForVariant('ts-frontend')
+    const rust = skillsForVariant('rust-bin')
+    expect(ts.some((s) => s.id === 'component-patterns')).toBe(true)
+    expect(rust.some((s) => s.id === 'component-patterns')).toBe(false)
+  })
+
+  it('all rule skills have non-empty markdown sections', () => {
+    for (const skill of RULE_SKILLS) {
+      expect(skill.markdownSection).toMatch(/^## /)
+      expect(skill.markdownSection.length).toBeGreaterThan(50)
+    }
+  })
+})
+
+describe('generateClaudeSettings', () => {
+  it('produces valid structure with all hook events', () => {
+    const settings = generateClaudeSettings(tsFrontendConfig)
+    expect(settings.hooks.UserPromptSubmit).toBeDefined()
+    expect(settings.hooks.PreToolUse).toBeDefined()
+    expect(settings.hooks.PostToolUse).toBeDefined()
+    expect(settings.hooks.SessionStart).toBeDefined()
+    expect(settings.hooks.Stop).toBeDefined()
+  })
+
+  it('blocks destructive commands in permission rules', () => {
+    const settings = generateClaudeSettings(tsFrontendConfig)
+    const denyRule = settings.permissions.rules.find((r) => r.decision === 'deny')
+    expect(denyRule).toBeDefined()
+    expect(denyRule?.if).toContain('rm -rf')
+    expect(denyRule?.if).toContain('git reset --hard')
+  })
+
+  it('allows the configured dev commands', () => {
+    const settings = generateClaudeSettings(tsFrontendConfig)
+    const allowRule = settings.permissions.rules.find(
+      (r) => r.decision === 'allow' && r.tool === 'Bash',
+    )
+    expect(allowRule?.if).toContain('vp check')
+  })
+})
+
+describe('generateCodexHooks', () => {
+  it('retargets hook paths from .claude to .codex', () => {
+    const codex = generateCodexHooks(tsFrontendConfig) as { hooks: { PreToolUse: unknown[] } }
+    const json = JSON.stringify(codex)
+    expect(json).toContain('.codex/hooks/')
+    expect(json).not.toContain('.claude/hooks/')
+  })
+})
+
+describe('generateCursorRules', () => {
+  it('generates one .mdc per selected skill', () => {
+    const rules = generateCursorRules(tsFrontendConfig)
+    const selected = RULE_SKILLS.filter((s) => tsFrontendConfig.skills.includes(s.id))
+    expect(rules.length).toBe(selected.length)
+  })
+
+  it('includes glob metadata', () => {
+    const rules = generateCursorRules(tsFrontendConfig)
+    expect(rules[0]?.content).toContain('globs:')
+    expect(rules[0]?.content).toContain('*.ts')
+  })
+
+  it('uses Rust globs for Rust project', () => {
+    const rules = generateCursorRules(rustConfig)
+    expect(rules[0]?.content).toContain('*.rs')
+  })
+})
+
+describe('generateLefthook', () => {
+  it('includes conventional commits, TDD guard, and PR size check', () => {
+    const yml = generateLefthook(tsFrontendConfig)
+    expect(yml).toContain('conventional-commits')
+    expect(yml).toContain('tdd-guard.sh')
+    expect(yml).toContain('pr-size-check.sh')
+    expect(yml).toContain('semgrep')
+  })
+
+  it('injects the configured lint and test commands', () => {
+    const yml = generateLefthook(tsFrontendConfig)
+    expect(yml).toContain('vp check')
+    expect(yml).toContain('vp test')
+  })
+})
+
+describe('generateLintConfig', () => {
+  it('returns empty config for TS (Vite+ owns it)', () => {
+    expect(generateLintConfig(tsFrontendConfig)).toEqual({})
+  })
+
+  it('generates clippy.toml + rustfmt.toml for Rust', () => {
+    const configs = generateLintConfig(rustConfig)
+    expect(configs['clippy.toml']).toBeDefined()
+    expect(configs['clippy.toml']).toContain('disallowed-names')
+    expect(configs['clippy.toml']).toContain('cognitive-complexity-threshold')
+    expect(configs['rustfmt.toml']).toBeDefined()
+    expect(configs['rustfmt.toml']).toContain('edition = "2024"')
+  })
+
+  it('generates .golangci.yml for Go', () => {
+    const configs = generateLintConfig(goConfig)
+    expect(configs['.golangci.yml']).toBeDefined()
+    expect(configs['.golangci.yml']).toContain('gocognit')
+    expect(configs['.golangci.yml']).toContain('varnamelen')
+    expect(configs['.golangci.yml']).toContain('depguard')
+  })
+})
+
+describe('generateClaudeMd', () => {
+  const fakeAnswers = {} as never
+
+  it('includes commands section with actual project commands', () => {
+    const md = generateClaudeMd(tsFrontendConfig, fakeAnswers)
+    expect(md).toContain('## Commands')
+    expect(md).toContain('vp dev')
+    expect(md).toContain('vp check')
+  })
+
+  it('includes beads block when beads tool is selected', () => {
+    const md = generateClaudeMd(tsFrontendConfig, fakeAnswers)
+    expect(md).toContain('Beads Issue Tracker')
+    expect(md).toContain('bd ready')
+  })
+
+  it('includes IDD workflow block when workflow is idd', () => {
+    const md = generateClaudeMd(tsFrontendConfig, fakeAnswers)
+    expect(md).toContain('Intent-Driven Development')
+  })
+
+  it('includes GSD workflow block when workflow is gsd', () => {
+    const md = generateClaudeMd(rustConfig, fakeAnswers)
+    expect(md).toContain('Get Shit Done')
+  })
+
+  it('includes contract-driven block when enabled with language-specific structure', () => {
+    const tsMd = generateClaudeMd(tsFrontendConfig, fakeAnswers)
+    expect(tsMd).toContain('Contract-Driven Modules')
+    expect(tsMd).toContain('contract.ts')
+  })
+
+  it('includes hallucination + destructive blocks always', () => {
+    const md = generateClaudeMd(rustConfig, fakeAnswers)
+    expect(md).toContain('Uncertainty and Verification')
+    expect(md).toContain('Destructive Operations')
+    expect(md).toContain('No Co-Authored-By')
+  })
+
+  it('only includes selected rule sections', () => {
+    const configWithoutComponents: DevConfig = {
+      ...tsFrontendConfig,
+      skills: ['code-quality', 'testing', 'ai-behavior'],
+    }
+    const md = generateClaudeMd(configWithoutComponents, fakeAnswers)
+    expect(md).not.toContain('## Component Patterns')
+    expect(md).toContain('## Code Quality')
+  })
+})

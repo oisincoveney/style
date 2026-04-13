@@ -1,0 +1,136 @@
+/**
+ * Project detection — reads lockfiles, package.json, Cargo.toml, go.mod
+ * to detect language, package manager, and existing commands.
+ */
+
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import type { Language, PackageManager } from './config.js'
+
+export interface Detected {
+  isEmpty: boolean
+  language: Language | null
+  packageManager: PackageManager | null
+  commands: {
+    dev: string | null
+    build: string | null
+    test: string | null
+    typecheck: string | null
+    lint: string | null
+    format: string | null
+  }
+  hasGitRemote: boolean
+  hasDockerfile: boolean
+  hasDockerCompose: boolean
+}
+
+export function detectProject(cwd: string): Detected {
+  const detected: Detected = {
+    isEmpty: false,
+    language: null,
+    packageManager: null,
+    commands: {
+      dev: null,
+      build: null,
+      test: null,
+      typecheck: null,
+      lint: null,
+      format: null,
+    },
+    hasGitRemote: false,
+    hasDockerfile: existsSync(join(cwd, 'Dockerfile')),
+    hasDockerCompose:
+      existsSync(join(cwd, 'docker-compose.yml')) ||
+      existsSync(join(cwd, 'docker-compose.yaml')) ||
+      existsSync(join(cwd, 'compose.yml')) ||
+      existsSync(join(cwd, 'compose.yaml')),
+  }
+
+  const pkgJsonPath = join(cwd, 'package.json')
+  const cargoPath = join(cwd, 'Cargo.toml')
+  const goModPath = join(cwd, 'go.mod')
+
+  if (existsSync(pkgJsonPath)) {
+    detected.language = 'typescript'
+    detected.packageManager = detectJsPackageManager(cwd)
+    readJsScripts(pkgJsonPath, detected)
+  } else if (existsSync(cargoPath)) {
+    detected.language = 'rust'
+    detected.packageManager = 'cargo'
+    detected.commands.dev = 'cargo run'
+    detected.commands.build = 'cargo build --release'
+    detected.commands.test = 'cargo test'
+    detected.commands.typecheck = 'cargo check'
+    detected.commands.lint = 'cargo clippy --all-targets -- -D warnings'
+    detected.commands.format = 'cargo fmt'
+  } else if (existsSync(goModPath)) {
+    detected.language = 'go'
+    detected.packageManager = 'go'
+    detected.commands.dev = 'go run .'
+    detected.commands.build = 'go build ./...'
+    detected.commands.test = 'go test ./...'
+    detected.commands.typecheck = 'go vet ./...'
+    detected.commands.lint = 'golangci-lint run'
+    detected.commands.format = 'gofmt -w .'
+  } else {
+    const entries = existsSync(cwd) ? readDir(cwd) : []
+    detected.isEmpty = entries.filter((name) => !name.startsWith('.')).length === 0
+  }
+
+  detected.hasGitRemote = checkGitRemote(cwd)
+
+  return detected
+}
+
+function readDir(cwd: string): ReadonlyArray<string> {
+  try {
+    // biome-ignore lint: node fs at boundary
+    return require('node:fs').readdirSync(cwd)
+  } catch {
+    return []
+  }
+}
+
+function detectJsPackageManager(cwd: string): PackageManager {
+  if (existsSync(join(cwd, 'bun.lock')) || existsSync(join(cwd, 'bun.lockb'))) return 'bun'
+  if (existsSync(join(cwd, 'pnpm-lock.yaml'))) return 'pnpm'
+  if (existsSync(join(cwd, 'yarn.lock'))) return 'yarn'
+  if (existsSync(join(cwd, 'package-lock.json'))) return 'npm'
+  return 'bun'
+}
+
+interface PackageJson {
+  scripts?: Record<string, string>
+  dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
+}
+
+function readJsScripts(pkgJsonPath: string, detected: Detected): void {
+  const pkg = JSON.parse(readFileSync(pkgJsonPath, 'utf8')) as PackageJson
+  const scripts = pkg.scripts ?? {}
+  const pm = detected.packageManager ?? 'bun'
+  const runner = pm === 'npm' ? 'npm run' : pm === 'cargo' || pm === 'go' ? pm : `${pm} run`
+
+  const scriptMatch = (candidates: ReadonlyArray<string>): string | null => {
+    for (const candidate of candidates) {
+      if (scripts[candidate] !== undefined) {
+        return `${runner} ${candidate}`
+      }
+    }
+    return null
+  }
+
+  detected.commands.dev = scriptMatch(['dev', 'start', 'serve'])
+  detected.commands.build = scriptMatch(['build'])
+  detected.commands.test = scriptMatch(['test', 'test:unit', 'vitest', 'jest'])
+  detected.commands.typecheck = scriptMatch(['typecheck', 'check-types', 'tsc', 'type-check'])
+  detected.commands.lint = scriptMatch(['lint', 'eslint', 'biome'])
+  detected.commands.format = scriptMatch(['format', 'prettier', 'fmt'])
+}
+
+function checkGitRemote(cwd: string): boolean {
+  const gitConfigPath = join(cwd, '.git', 'config')
+  if (!existsSync(gitConfigPath)) return false
+  const contents = readFileSync(gitConfigPath, 'utf8')
+  return contents.includes('[remote')
+}
