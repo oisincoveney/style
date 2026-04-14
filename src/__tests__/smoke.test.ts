@@ -478,10 +478,50 @@ describe('installAll update mode', () => {
       // User-added PreCompact event preserved
       expect(merged.hooks.PreCompact).toBeDefined()
       expect(JSON.stringify(merged.hooks.PreCompact)).toContain('bd prime')
-      // Tool-managed SessionStart replaced with generated version
+      // Tool-managed context-bootstrap.sh added to SessionStart (appended, not replaced)
       expect(JSON.stringify(merged.hooks.SessionStart)).toContain('context-bootstrap.sh')
+      // Existing hook within SessionStart is preserved (not lost)
+      expect(JSON.stringify(merged.hooks.SessionStart)).toContain('existing-hook.sh')
       // Stop hook added by update
       expect(merged.hooks.Stop).toBeDefined()
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  it('preserves project-specific hooks within a matcher on update', async () => {
+    const dir = makeTmpProject({
+      'package.json': JSON.stringify({ name: 'test', scripts: {} }),
+    })
+    try {
+      writeConfig(dir, tsFrontendConfig)
+      const { mkdirSync } = await import('node:fs')
+      mkdirSync(join(dir, '.claude'), { recursive: true })
+      const existing = {
+        hooks: {
+          PreToolUse: [
+            {
+              matcher: 'Write|Edit',
+              hooks: [{ type: 'command', command: '.claude/hooks/ts-style-guard.sh', timeout: 30 }],
+            },
+          ],
+        },
+      }
+      writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify(existing, null, 2))
+      await installAll(dir, tsFrontendConfig, {} as never, {
+        skipSideEffects: true,
+        skipScaffolding: true,
+        isUpdate: true,
+      })
+      const merged = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'))
+      const writeEditEntry = merged.hooks.PreToolUse.find(
+        (e: { matcher?: string }) => e.matcher === 'Write|Edit',
+      )
+      // Custom ts-style-guard preserved
+      expect(JSON.stringify(writeEditEntry)).toContain('ts-style-guard.sh')
+      // Generated hooks also added
+      expect(JSON.stringify(writeEditEntry)).toContain('import-validator.sh')
+      expect(JSON.stringify(writeEditEntry)).toContain('ai-antipattern-guard.sh')
     } finally {
       rmSync(dir, { recursive: true })
     }

@@ -404,6 +404,8 @@ function writeJson(path: string, data: unknown): void {
   writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`)
 }
 
+type HookEntry = { matcher?: string; hooks: { type: string; command: string; timeout?: number }[] }
+
 function writeOrMergeSettings(
   path: string,
   generated: ReturnType<typeof generateClaudeSettings>,
@@ -414,14 +416,48 @@ function writeOrMergeSettings(
     log('.claude/settings.json')
     return
   }
+
   const existing = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
-  const existingHooks = (existing.hooks ?? {}) as Record<string, unknown>
-  const merged = {
-    ...existing,
-    ...generated,
-    // Merge hooks: generated events overwrite existing; user-only events (e.g. PreCompact) are preserved
-    hooks: { ...existingHooks, ...generated.hooks },
+  const existingHooks = (existing.hooks ?? {}) as Record<string, HookEntry[]>
+  const generatedHooks = generated.hooks as Record<string, HookEntry[]>
+
+  // Merge hook events:
+  // - Events only in existing (e.g. PreCompact: bd prime) → keep as-is
+  // - Events only in generated → add
+  // - Events in both → merge by matcher:
+  //     * For a given matcher, generated hooks replace existing hooks for that matcher
+  //     * Matchers only in existing are kept (preserves custom hooks like ts-style-guard)
+  //     * Commands within a generated matcher that already appear in existing are deduped
+  const mergedHooks: Record<string, HookEntry[]> = { ...existingHooks }
+
+  for (const [event, genEntries] of Object.entries(generatedHooks)) {
+    if (!mergedHooks[event]) {
+      mergedHooks[event] = genEntries
+      continue
+    }
+    const existingEntries = mergedHooks[event]
+    const result: HookEntry[] = [...existingEntries]
+
+    for (const genEntry of genEntries) {
+      const matcher = genEntry.matcher
+      const existingIdx = result.findIndex((e) => (e.matcher ?? '') === (matcher ?? ''))
+      if (existingIdx === -1) {
+        // New matcher — add it
+        result.push(genEntry)
+      } else {
+        // Merge hooks within this matcher: keep existing hooks, append generated ones not already present
+        const existingCommands = new Set(result[existingIdx].hooks.map((h) => h.command))
+        const toAdd = genEntry.hooks.filter((h) => !existingCommands.has(h.command))
+        result[existingIdx] = {
+          ...result[existingIdx],
+          hooks: [...result[existingIdx].hooks, ...toAdd],
+        }
+      }
+    }
+    mergedHooks[event] = result
   }
+
+  const merged = { ...existing, ...generated, hooks: mergedHooks }
   writeJson(path, merged)
   log('.claude/settings.json (merged)')
 }
