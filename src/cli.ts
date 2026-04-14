@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { runInit } from './init.js'
-
+import { runUpdate } from './update.js'
 
 const COMMANDS: Record<string, string> = {
-  init: 'Initialize an opinionated dev environment in the current (or new) project',
-  help: 'Show this help message',
+  init:   'Initialize an opinionated dev environment in the current (or new) project',
+  update: 'Re-sync generated files (hooks, docs, settings) from .dev.config.json',
+  help:   'Show this help message',
 }
 
 function printHelp(): void {
@@ -27,6 +28,9 @@ async function main(): Promise<void> {
   switch (command) {
     case 'init':
       await runInit()
+      break
+    case 'update':
+      await runUpdate()
       break
     case 'help':
     case '--help':

@@ -39,6 +39,10 @@ const TEMPLATES_DIR = resolve(__dirname, '..', 'templates')
 export interface InstallOptions {
   /** Skip side effects like bd init, MCP registration, plugin installs. Used by tests. */
   skipSideEffects?: boolean
+  /** Skip project scaffolding (example modules, PBT tests, logger). Used by `update`. */
+  skipScaffolding?: boolean
+  /** Update mode: merge settings instead of overwriting, skip lefthook and lint/tool configs. */
+  isUpdate?: boolean
 }
 
 export async function installAll(
@@ -61,8 +65,12 @@ export async function installAll(
   if (config.targets.includes('claude')) {
     installClaudeHooks(cwd, log)
     const settings = generateClaudeSettings(config)
-    writeJson(join(cwd, '.claude', 'settings.json'), settings)
-    log('.claude/settings.json')
+    if (options.isUpdate) {
+      writeOrMergeSettings(join(cwd, '.claude', 'settings.json'), settings, log)
+    } else {
+      writeJson(join(cwd, '.claude', 'settings.json'), settings)
+      log('.claude/settings.json')
+    }
     installProjectSkills(cwd, config, log, warn)
   }
 
@@ -92,36 +100,42 @@ export async function installAll(
   }
 
   if (config.targets.includes('lefthook')) {
-    const lefthook = generateLefthook(config)
-    writeFileSync(join(cwd, 'lefthook.yml'), lefthook)
-    log('lefthook.yml')
+    if (options.isUpdate) {
+      warn('lefthook.yml — skipped on update (merge manually if needed)')
+    } else {
+      const lefthook = generateLefthook(config)
+      writeFileSync(join(cwd, 'lefthook.yml'), lefthook)
+      log('lefthook.yml')
+    }
   }
 
-  // Language-specific lint/format configs. Warn before overwriting existing.
-  const lintConfigs = generateLintConfig(config)
-  for (const [filename, contents] of Object.entries(lintConfigs)) {
-    const dest = join(cwd, filename)
-    if (existsSync(dest)) {
-      const backup = `${dest}.dev-backup`
-      copyFileSync(dest, backup)
-      warn(`${filename} already exists — backed up to ${filename}.dev-backup`)
+  if (!options.isUpdate) {
+    // Language-specific lint/format configs. Warn before overwriting existing.
+    const lintConfigs = generateLintConfig(config)
+    for (const [filename, contents] of Object.entries(lintConfigs)) {
+      const dest = join(cwd, filename)
+      if (existsSync(dest)) {
+        const backup = `${dest}.dev-backup`
+        copyFileSync(dest, backup)
+        warn(`${filename} already exists — backed up to ${filename}.dev-backup`)
+      }
+      writeFileSync(dest, contents)
+      log(filename)
     }
-    writeFileSync(dest, contents)
-    log(filename)
-  }
 
-  // Tool configs (Semgrep, commitlint, Stryker/cargo-mutants/go-mutesting,
-  // dependency-cruiser, strict tsconfig)
-  const toolConfigs = generateToolConfigs(config)
-  for (const [filename, contents] of Object.entries(toolConfigs)) {
-    const dest = join(cwd, filename)
-    if (existsSync(dest)) {
-      const backup = `${dest}.dev-backup`
-      copyFileSync(dest, backup)
-      warn(`${filename} already exists — backed up to ${filename}.dev-backup`)
+    // Tool configs (Semgrep, commitlint, Stryker/cargo-mutants/go-mutesting,
+    // dependency-cruiser, strict tsconfig)
+    const toolConfigs = generateToolConfigs(config)
+    for (const [filename, contents] of Object.entries(toolConfigs)) {
+      const dest = join(cwd, filename)
+      if (existsSync(dest)) {
+        const backup = `${dest}.dev-backup`
+        copyFileSync(dest, backup)
+        warn(`${filename} already exists — backed up to ${filename}.dev-backup`)
+      }
+      writeFileSync(dest, contents)
+      log(filename)
     }
-    writeFileSync(dest, contents)
-    log(filename)
   }
 
   // CLAUDE.md and AGENTS.md — split into root + fragments via @imports
@@ -143,13 +157,15 @@ export async function installAll(
   log('.claude/specs/TEMPLATE.md')
 
   // Project scaffolding (contract-driven module example, PBT example, logger)
-  const scaffolded = generateProjectScaffolding(config)
-  for (const file of scaffolded) {
-    const dest = join(cwd, file.path)
-    if (existsSync(dest)) continue // don't overwrite user code
-    mkdirSync(dirname(dest), { recursive: true })
-    writeFileSync(dest, file.content)
-    log(file.path)
+  if (!options.skipScaffolding) {
+    const scaffolded = generateProjectScaffolding(config)
+    for (const file of scaffolded) {
+      const dest = join(cwd, file.path)
+      if (existsSync(dest)) continue // don't overwrite user code
+      mkdirSync(dirname(dest), { recursive: true })
+      writeFileSync(dest, file.content)
+      log(file.path)
+    }
   }
 
   // ─── Side-effect installs ───────────────────────────────────────────
@@ -386,6 +402,28 @@ function commandExists(cmd: string): boolean {
 function writeJson(path: string, data: unknown): void {
   mkdirSync(dirname(path), { recursive: true })
   writeFileSync(path, `${JSON.stringify(data, null, 2)}\n`)
+}
+
+function writeOrMergeSettings(
+  path: string,
+  generated: ReturnType<typeof generateClaudeSettings>,
+  log: (msg: string) => void,
+): void {
+  if (!existsSync(path)) {
+    writeJson(path, generated)
+    log('.claude/settings.json')
+    return
+  }
+  const existing = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+  const existingHooks = (existing.hooks ?? {}) as Record<string, unknown>
+  const merged = {
+    ...existing,
+    ...generated,
+    // Merge hooks: generated events overwrite existing; user-only events (e.g. PreCompact) are preserved
+    hooks: { ...existingHooks, ...generated.hooks },
+  }
+  writeJson(path, merged)
+  log('.claude/settings.json (merged)')
 }
 
 const DEV_BLOCK_START = '<!-- BEGIN @oisincoveney/dev managed block -->'

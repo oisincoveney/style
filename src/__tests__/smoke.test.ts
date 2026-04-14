@@ -8,9 +8,11 @@ import { generateLefthook } from '../generate/lefthook.js'
 import { generateLintConfig } from '../generate/lint-config.js'
 import { buildClaudeMdBundle, generateClaudeMd } from '../generate/markdown.js'
 import { RULE_SKILLS, SUPERPOWER_SKILLS, skillsForVariant } from '../skills.js'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { installAll } from '../install.js'
+import { writeConfig } from '../config.js'
 
 const tsFrontendConfig: DevConfig = {
   language: 'typescript',
@@ -419,5 +421,88 @@ describe('generateClaudeMd', () => {
     const md = generateClaudeMd(configWithoutComponents, fakeAnswers)
     expect(md).not.toContain('## Component Patterns')
     expect(md).toContain('## Code Quality')
+  })
+})
+
+describe('installAll update mode', () => {
+  function makeTmpProject(files: Record<string, string>): string {
+    const dir = mkdtempSync(join(tmpdir(), 'style-template-update-test-'))
+    for (const [name, content] of Object.entries(files)) {
+      writeFileSync(join(dir, name), content)
+    }
+    return dir
+  }
+
+  it('does not overwrite lefthook.yml when isUpdate is true', async () => {
+    const dir = makeTmpProject({
+      'package.json': JSON.stringify({ name: 'test', scripts: {} }),
+    })
+    try {
+      writeConfig(dir, tsFrontendConfig)
+      const customLefthook = 'pre-commit:\n  commands:\n    my-custom-hook:\n      run: echo custom\n'
+      writeFileSync(join(dir, 'lefthook.yml'), customLefthook)
+      await installAll(dir, tsFrontendConfig, {} as never, {
+        skipSideEffects: true,
+        skipScaffolding: true,
+        isUpdate: true,
+      })
+      const after = readFileSync(join(dir, 'lefthook.yml'), 'utf8')
+      expect(after).toBe(customLefthook)
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  it('merges settings.json preserving user-added events on update', async () => {
+    const dir = makeTmpProject({
+      'package.json': JSON.stringify({ name: 'test', scripts: {} }),
+    })
+    try {
+      writeConfig(dir, tsFrontendConfig)
+      const claudeDir = join(dir, '.claude')
+      const { mkdirSync } = await import('node:fs')
+      mkdirSync(claudeDir, { recursive: true })
+      const existing = {
+        hooks: {
+          PreCompact: [{ matcher: '', hooks: [{ type: 'command', command: 'bd prime' }] }],
+          SessionStart: [{ hooks: [{ type: 'command', command: 'existing-hook.sh' }] }],
+        },
+      }
+      writeFileSync(join(claudeDir, 'settings.json'), JSON.stringify(existing, null, 2))
+      await installAll(dir, tsFrontendConfig, {} as never, {
+        skipSideEffects: true,
+        skipScaffolding: true,
+        isUpdate: true,
+      })
+      const merged = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'))
+      // User-added PreCompact event preserved
+      expect(merged.hooks.PreCompact).toBeDefined()
+      expect(JSON.stringify(merged.hooks.PreCompact)).toContain('bd prime')
+      // Tool-managed SessionStart replaced with generated version
+      expect(JSON.stringify(merged.hooks.SessionStart)).toContain('context-bootstrap.sh')
+      // Stop hook added by update
+      expect(merged.hooks.Stop).toBeDefined()
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
+
+  it('does not write scaffolding files when skipScaffolding is true', async () => {
+    const dir = makeTmpProject({
+      'package.json': JSON.stringify({ name: 'test', scripts: {} }),
+    })
+    try {
+      writeConfig(dir, { ...tsFrontendConfig, contractDriven: true })
+      await installAll(dir, { ...tsFrontendConfig, contractDriven: true }, {} as never, {
+        skipSideEffects: true,
+        skipScaffolding: true,
+        isUpdate: true,
+      })
+      // Contract-driven scaffolding should not be written
+      const { existsSync } = await import('node:fs')
+      expect(existsSync(join(dir, 'src', 'modules', 'example'))).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
   })
 })
