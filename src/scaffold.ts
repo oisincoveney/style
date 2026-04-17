@@ -72,13 +72,24 @@ async function scaffoldTsBackend(
   projectDir: string,
   answers: Answers,
 ): Promise<string> {
-  if (answers.framework === 'hono') {
-    // create-hono takes the project name as a positional arg and creates it under cwd
-    const cmd = `bunx create-hono@latest ${answers.projectName} --template nodejs --pm bun --install`
-    p.log.step(`Running: ${cmd}`)
-    execSync(cmd, { cwd, stdio: 'inherit' })
-  } else {
-    p.log.info(`No scaffold available for ${answers.framework ?? 'none'} — add your dependencies manually.`)
+  switch (answers.framework) {
+    case 'hono':
+      // create-hono takes the project name as a positional arg and creates under cwd
+      execSync(
+        `bunx create-hono@latest ${answers.projectName} --template nodejs --pm bun --install`,
+        { cwd, stdio: 'inherit' },
+      )
+      break
+    case 'fastify':
+      // fastify-cli generates into cwd; run from the project dir
+      execSync(`bunx fastify-cli@latest generate . --lang ts`, { cwd: projectDir, stdio: 'inherit' })
+      break
+    case 'express':
+      // express-generator-typescript generates into cwd; run from the project dir
+      execSync(`bunx express-generator-typescript@latest .`, { cwd: projectDir, stdio: 'inherit' })
+      break
+    default:
+      p.log.info('No scaffold available — add your dependencies manually.')
   }
 
   return projectDir
