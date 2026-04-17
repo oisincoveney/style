@@ -53,6 +53,10 @@ async function scaffoldTypeScript(
     return scaffoldTsMonorepo(cwd, projectDir, answers)
   }
 
+  if (answers.variant === 'ts-backend') {
+    return scaffoldTsBackend(cwd, projectDir, answers)
+  }
+
   const kind = answers.variant === 'ts-library' ? 'vite:library' : 'vite:application'
   const isLibrary = kind === 'vite:library'
   const templateFlag = !isLibrary && answers.framework ? ` -- --template ${answers.framework}` : ''
@@ -60,6 +64,32 @@ async function scaffoldTypeScript(
   const cmd = `vp create ${kind} --directory ${answers.projectName}${nonInteractiveFlag} --agent claude${templateFlag}`
   p.log.step(`Running: ${cmd}`)
   execSync(cmd, { cwd, stdio: isLibrary ? 'pipe' : 'inherit' })
+  return projectDir
+}
+
+// Backend frameworks that have a supported create-* npm package.
+// vp create <key> delegates to create-<key> under the hood.
+const BACKEND_CREATE_PACKAGES: Partial<Record<string, string>> = {
+  hono: 'hono',       // create-hono (official)
+  fastify: 'fastify', // create-fastify (official)
+}
+
+async function scaffoldTsBackend(
+  cwd: string,
+  projectDir: string,
+  answers: Answers,
+): Promise<string> {
+  const framework = answers.framework !== 'none' ? answers.framework : null
+  const createPkg = framework ? BACKEND_CREATE_PACKAGES[framework] : null
+
+  if (createPkg) {
+    const cmd = `vp create ${createPkg} --directory ${answers.projectName} --agent claude`
+    p.log.step(`Running: ${cmd}`)
+    execSync(cmd, { cwd, stdio: 'inherit' })
+  } else {
+    p.log.info(`No scaffold available for ${framework ?? 'none'} — add your dependencies manually.`)
+  }
+
   return projectDir
 }
 
