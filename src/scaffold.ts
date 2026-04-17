@@ -67,27 +67,18 @@ async function scaffoldTypeScript(
   return projectDir
 }
 
-// Backend frameworks that have a supported create-* npm package.
-// vp create <key> delegates to create-<key> under the hood.
-const BACKEND_CREATE_PACKAGES: Partial<Record<string, string>> = {
-  hono: 'hono',       // create-hono (official)
-  fastify: 'fastify', // create-fastify (official)
-}
-
 async function scaffoldTsBackend(
   cwd: string,
   projectDir: string,
   answers: Answers,
 ): Promise<string> {
-  const framework = answers.framework !== 'none' ? answers.framework : null
-  const createPkg = framework ? BACKEND_CREATE_PACKAGES[framework] : null
-
-  if (createPkg) {
-    const cmd = `vp create ${createPkg} --directory ${answers.projectName} --agent claude`
+  if (answers.framework === 'hono') {
+    // create-hono takes the project name as a positional arg and creates it under cwd
+    const cmd = `bunx create-hono@latest ${answers.projectName} --template nodejs --pm bun --install`
     p.log.step(`Running: ${cmd}`)
     execSync(cmd, { cwd, stdio: 'inherit' })
   } else {
-    p.log.info(`No scaffold available for ${framework ?? 'none'} — add your dependencies manually.`)
+    p.log.info(`No scaffold available for ${answers.framework ?? 'none'} — add your dependencies manually.`)
   }
 
   return projectDir
