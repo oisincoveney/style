@@ -128,6 +128,30 @@ describe('installAll', () => {
     expect(commands).toMatch(/^---\nname: commands/)
   })
 
+  it('installs the policies skill and slash commands', async () => {
+    await installAll(dir, fakeConfig, fakeAnswers, { skipSideEffects: true })
+
+    // Owned skill copied regardless of superpower selection
+    const policies = readFileSync(join(dir, '.claude/skills/policies/SKILL.md'), 'utf8')
+    expect(policies).toContain('name: policies')
+    expect(policies).toContain('user-invocable: false')
+    expect(policies).toContain('Destructive Operations')
+
+    // /verify command references the configured commands
+    const verify = readFileSync(join(dir, '.claude/commands/verify.md'), 'utf8')
+    expect(verify).toContain(fakeConfig.commands.typecheck)
+    expect(verify).toContain(fakeConfig.commands.test)
+    expect(verify).toContain('disable-model-invocation: true')
+
+    // /ready command exists when beads is enabled
+    expect(existsSync(join(dir, '.claude/commands/ready.md'))).toBe(true)
+    // /spec command always
+    expect(existsSync(join(dir, '.claude/commands/spec.md'))).toBe(true)
+
+    // Hook file for statusLine copied
+    expect(existsSync(join(dir, '.claude/hooks/statusline.sh'))).toBe(true)
+  })
+
   it('rule files with paths frontmatter land in .claude/rules/ when the skill is selected', async () => {
     const frontendAnswers: Answers = {
       ...fakeAnswers,

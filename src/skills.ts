@@ -25,6 +25,20 @@ export interface SuperpowerSkill {
   name: string
   description: string
   appliesTo: ReadonlyArray<ProjectVariant>
+  /**
+   * How this skill should be exposed to Claude Code:
+   *
+   * - `action`: Side-effect workflows (deploy, commit). Set
+   *   `disable-model-invocation: true` so only the user can trigger.
+   * - `reference`: Background knowledge (sql-queries, ux-copy). Set
+   *   `user-invocable: false` so it stays out of the slash menu and is
+   *   surfaced by Claude when relevant.
+   * - `workflow`: Interactive runbooks (debug, code-review). Default
+   *   invocation; `allowedTools` can pre-approve tools.
+   */
+  classification: 'action' | 'reference' | 'workflow'
+  /** Tools pre-approved while this skill is active (SKILL.md `allowed-tools`). */
+  allowedTools?: ReadonlyArray<string>
 }
 
 export type Skill = RuleSkill | SuperpowerSkill
@@ -152,6 +166,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'using-superpowers',
     description: 'Meta-skill that forces Claude to invoke relevant skills',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'debug',
@@ -159,6 +174,8 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'debug',
     description: 'Structured debugging session',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
+    allowedTools: ['Read', 'Grep', 'Glob', 'Bash'],
   },
   {
     id: 'code-review',
@@ -166,6 +183,8 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'code-review',
     description: 'Security, performance, correctness review',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
+    allowedTools: ['Read', 'Grep', 'Glob'],
   },
   {
     id: 'architecture',
@@ -173,6 +192,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'architecture',
     description: 'Architecture decision records',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'system-design',
@@ -180,6 +200,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'system-design',
     description: 'Services, APIs, data modeling',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'testing-strategy',
@@ -187,6 +208,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'testing-strategy',
     description: 'Test plans and approaches',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'tech-debt',
@@ -194,6 +216,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'tech-debt',
     description: 'Identify, categorize, prioritize tech debt',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'deploy-checklist',
@@ -201,6 +224,8 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'deploy-checklist',
     description: 'Pre-deployment verification',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
+    allowedTools: ['Read', 'Grep', 'Bash'],
   },
   {
     id: 'documentation',
@@ -208,6 +233,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'documentation',
     description: 'Technical documentation',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'write-spec',
@@ -215,6 +241,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'write-spec',
     description: 'Feature specs and PRDs',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'product-brainstorming',
@@ -222,6 +249,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'product-brainstorming',
     description: 'Product ideation',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'sprint-planning',
@@ -229,6 +257,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'sprint-planning',
     description: 'Sprint scoping',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'incident-response',
@@ -236,6 +265,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'incident-response',
     description: 'When things break',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'runbook',
@@ -243,6 +273,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'runbook',
     description: 'Operational runbooks',
     appliesTo: ALL_VARIANTS,
+    classification: 'reference',
   },
   {
     id: 'find-skills',
@@ -250,6 +281,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'find-skills',
     description: 'Discover more skills',
     appliesTo: ALL_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'frontend-design',
@@ -257,6 +289,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'frontend-design',
     description: 'Production-grade UI',
     appliesTo: TS_FRONTEND_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'design-system',
@@ -264,6 +297,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'design-system',
     description: 'Audit/extend design system',
     appliesTo: TS_FRONTEND_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'design-critique',
@@ -271,6 +305,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'design-critique',
     description: 'Usability feedback',
     appliesTo: TS_FRONTEND_VARIANTS,
+    classification: 'workflow',
   },
   {
     id: 'accessibility-review',
@@ -278,6 +313,8 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'accessibility-review',
     description: 'WCAG audit',
     appliesTo: TS_FRONTEND_VARIANTS,
+    classification: 'workflow',
+    allowedTools: ['Read', 'Grep'],
   },
   {
     id: 'ux-copy',
@@ -285,6 +322,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'ux-copy',
     description: 'Microcopy and error messages',
     appliesTo: TS_FRONTEND_VARIANTS,
+    classification: 'reference',
   },
   {
     id: 'vercel-react-best-practices',
@@ -292,6 +330,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'vercel-react-best-practices',
     description: 'React/Next.js performance',
     appliesTo: TS_FRONTEND_VARIANTS,
+    classification: 'reference',
   },
   {
     id: 'sql-queries',
@@ -299,6 +338,7 @@ export const SUPERPOWER_SKILLS: ReadonlyArray<SuperpowerSkill> = [
     name: 'sql-queries',
     description: 'SQL across warehouses',
     appliesTo: ['ts-backend', 'ts-fullstack', 'rust-bin', 'go-bin'],
+    classification: 'reference',
   },
 ]
 

@@ -132,6 +132,12 @@ describe('generateClaudeSettings', () => {
     expect(commands.some((c) => c.includes('pre-compact-prime.sh'))).toBe(true)
   })
 
+  it('includes a statusLine entry pointing at statusline.sh', () => {
+    const settings = generateClaudeSettings(tsFrontendConfig)
+    expect(settings.statusLine).toBeDefined()
+    expect(settings.statusLine?.command).toContain('statusline.sh')
+  })
+
   it('blocks destructive commands in permission rules', () => {
     const settings = generateClaudeSettings(tsFrontendConfig)
     const denyRule = settings.permissions.rules.find((r) => r.decision === 'deny')

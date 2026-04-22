@@ -27,10 +27,11 @@ import { generateCodexHooks } from './generate/codex-hooks.js'
 import { generateCursorRules } from './generate/cursor-rules.js'
 import { generateLefthook } from './generate/lefthook.js'
 import { generateLintConfig } from './generate/lint-config.js'
+import { generateCommands } from './generate/commands.js'
 import { generateOpencodePlugin } from './generate/opencode-plugin.js'
 import { generateRules } from './generate/rules.js'
 import { generateToolConfigs } from './generate/tool-configs.js'
-import { SUPERPOWER_SKILLS } from './skills.js'
+import { SUPERPOWER_SKILLS, type SuperpowerSkill } from './skills.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -69,6 +70,7 @@ export async function installAll(
       writeJson(join(cwd, '.claude', 'settings.json'), settings)
       log('.claude/settings.json')
     }
+    installOwnedSkills(cwd, log)
     installProjectSkills(cwd, config, log, warn)
   }
 
@@ -149,6 +151,14 @@ export async function installAll(
     for (const rule of rules) {
       writeFileSync(join(rulesDir, rule.filename), rule.content)
       log(`.claude/rules/${rule.filename}`)
+    }
+
+    // .claude/commands/ — single-purpose slash commands.
+    const commandsDir = join(cwd, '.claude', 'commands')
+    mkdirSync(commandsDir, { recursive: true })
+    for (const cmd of generateCommands(config)) {
+      writeFileSync(join(commandsDir, cmd.filename), cmd.content)
+      log(`.claude/commands/${cmd.filename}`)
     }
   }
 
@@ -238,8 +248,83 @@ function installProjectSkills(
     }
     const dest = join(destRoot, skill.id)
     cpSync(src, dest, { recursive: true, dereference: true })
+    stampSkillFrontmatter(join(dest, 'SKILL.md'), skill, warn)
     log(`.claude/skills/${skill.id}/`)
   }
+}
+
+/**
+ * Installs skills owned by this package (currently just `policies`).
+ * These are always copied, regardless of superpower selection, because
+ * they're referenced by the kernel CLAUDE.md.
+ */
+function installOwnedSkills(cwd: string, log: (msg: string) => void): void {
+  const srcDir = join(TEMPLATES_DIR, 'skills')
+  if (!existsSync(srcDir)) return
+  const destRoot = join(cwd, '.claude', 'skills')
+  mkdirSync(destRoot, { recursive: true })
+  for (const entry of readdirSync(srcDir)) {
+    const src = join(srcDir, entry)
+    const dest = join(destRoot, entry)
+    cpSync(src, dest, { recursive: true, dereference: true })
+    log(`.claude/skills/${entry}/`)
+  }
+}
+
+/**
+ * Ensures SKILL.md frontmatter reflects the skill's classification:
+ * - reference: sets `disable-model-invocation: true` and `user-invocable: false`
+ * - action:    sets `disable-model-invocation: true`
+ * - workflow:  default (both invocable) + optional `allowed-tools`
+ *
+ * Does not touch the skill body. Existing frontmatter fields are preserved
+ * unless we're explicitly overriding them.
+ */
+function stampSkillFrontmatter(
+  path: string,
+  skill: SuperpowerSkill,
+  warn: (msg: string) => void,
+): void {
+  if (!existsSync(path)) {
+    warn(`Skill has no SKILL.md: ${skill.id}`)
+    return
+  }
+  const raw = readFileSync(path, 'utf8')
+  let front: Record<string, string> = {}
+  let body = raw
+  if (raw.startsWith('---\n')) {
+    const end = raw.indexOf('\n---\n', 4)
+    if (end !== -1) {
+      const yaml = raw.slice(4, end)
+      body = raw.slice(end + 5)
+      for (const line of yaml.split('\n')) {
+        const match = line.match(/^([a-zA-Z_-]+):\s*(.*)$/)
+        if (match) front[match[1]] = match[2]
+      }
+    }
+  }
+
+  if (skill.classification === 'reference') {
+    front['disable-model-invocation'] = 'true'
+    front['user-invocable'] = 'false'
+  } else if (skill.classification === 'action') {
+    front['disable-model-invocation'] = 'true'
+  }
+  if (skill.allowedTools && skill.allowedTools.length > 0 && !front['allowed-tools']) {
+    front['allowed-tools'] = skill.allowedTools.join(' ')
+  }
+
+  if (!front['description'] || front['description'].length < 40) {
+    warn(
+      `Skill ${skill.id} has a short or missing description — Claude may not load it when relevant.`,
+    )
+    if (!front['description']) {
+      front['description'] = skill.description
+    }
+  }
+
+  const yamlLines = Object.entries(front).map(([k, v]) => `${k}: ${v}`)
+  writeFileSync(path, `---\n${yamlLines.join('\n')}\n---\n${body}`)
 }
 
 function installBeads(

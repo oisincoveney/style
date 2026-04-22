@@ -33,6 +33,10 @@ interface ClaudeSettings {
       reason: string
     }>
   }
+  statusLine?: {
+    type: 'command'
+    command: string
+  }
   mcpServers?: Record<string, unknown>
 }
 
@@ -98,6 +102,10 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
           hooks: [hook('pre-compact-prime.sh', 10)],
         },
       ],
+    },
+    statusLine: {
+      type: 'command',
+      command: `cd "$(git rev-parse --show-toplevel)" && .claude/hooks/statusline.sh`,
     },
     permissions: {
       mode: 'default',
