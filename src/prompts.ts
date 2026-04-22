@@ -21,11 +21,9 @@ import {
 } from './skills.js'
 
 export interface Answers {
-  scaffoldNew: boolean
   language: Language
   variant: ProjectVariant
   framework: string | null
-  projectName: string
   packageManager: PackageManager
   commands: {
     dev: string
@@ -58,14 +56,7 @@ function cancelGuard<T>(value: T | symbol): T {
   return value
 }
 
-export interface RunPromptsOptions extends Detected {
-  /** If true, this is a new project being scaffolded. */
-  scaffoldNew: boolean
-  /** If set, skip the project name prompt and use this. */
-  preferProjectName: string | null
-}
-
-export async function runPrompts(detected: RunPromptsOptions): Promise<Answers> {
+export async function runPrompts(detected: Detected): Promise<Answers> {
   const variant = cancelGuard(
     await p.select<ProjectVariant>({
       message: 'What are you building?',
@@ -126,18 +117,6 @@ export async function runPrompts(detected: RunPromptsOptions): Promise<Answers> 
           { value: 'uikit', label: 'UIKit' },
           { value: 'appkit', label: 'AppKit (macOS)' },
         ],
-      }),
-    )
-  }
-
-  const scaffoldNew = detected.scaffoldNew
-  let projectName = ''
-  if (scaffoldNew) {
-    projectName = cancelGuard(
-      await p.text({
-        message: 'Project name?',
-        placeholder: 'my-project',
-        validate: (value) => (value.length === 0 ? 'Name is required' : undefined),
       }),
     )
   }
@@ -292,11 +271,9 @@ export async function runPrompts(detected: RunPromptsOptions): Promise<Answers> 
   const models = await resolveModelProfile(modelProfile)
 
   return {
-    scaffoldNew,
     language,
     variant,
     framework,
-    projectName,
     packageManager,
     commands,
     skills: [...skillSelection, ...superpowerSelection],
@@ -414,7 +391,6 @@ function defaultCommandsFor(
   const d = detected.commands
 
   if (variant.startsWith('ts-')) {
-    // Vite+ defaults when we're scaffolding fresh
     return {
       dev: d.dev ?? 'vp dev',
       build: d.build ?? 'vp build',

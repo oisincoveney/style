@@ -4,7 +4,7 @@ Opinionated AI development environment generator for multi-language projects. In
 
 ## What it does
 
-Running `oisin-dev init` in a project (or an empty directory) walks you through a series of prompts, then writes a consistent set of files:
+Running `oisin-dev init` inside an existing project walks you through a series of prompts, then writes a consistent set of files:
 
 - **`.dev.config.json`** — single source of truth for all generated content
 - **`.claude/`** — hooks, settings, docs, and skills for Claude Code
@@ -33,11 +33,11 @@ npx @oisincoveney/dev init
 
 ### `oisin-dev init`
 
-Interactive setup for a new or existing project.
+Interactive setup for an existing project. Run inside a directory with `package.json`, `Cargo.toml`, `go.mod`, or `Package.swift` — scaffolding a new project is out of scope.
 
 **Steps:**
 
-1. **Detect or scaffold** — Reads existing `package.json`, `Cargo.toml`, `go.mod`, or `Package.swift` to infer the project language and type. If the directory is empty, offers to scaffold a new project (via `vp`, `cargo`, `go work`, etc.)
+1. **Detect** — Reads existing `package.json`, `Cargo.toml`, `go.mod`, or `Package.swift` to infer the project language and type. Exits with an error if none is present.
 
 2. **Project type** — Selects from 15 variants across 4 languages:
    - TypeScript: `ts-frontend`, `ts-backend`, `ts-fullstack`, `ts-lib`, `ts-cli`, `ts-monorepo`
@@ -140,15 +140,6 @@ Generated with sensible defaults for each language. Existing configs are backed 
 | `.commitlintrc.json` | Commit message format enforcement |
 | `dependency-cruiser.config.js` | Architecture boundary enforcement (TS) |
 | `stryker.config.mjs` / `.cargo-mutants.toml` | Mutation testing |
-
-### Scaffolding (optional)
-
-When enabled, writes example files to get a project started with the right patterns:
-
-- `src/modules/example/` — contract-driven module with `index.ts`, `contract.ts`, `implementation.ts`
-- `src/example.test.ts` — property-based testing example using `fast-check`
-- `src/logger.ts` — structured logging setup
-- `e2e/` — Playwright scaffolding (frontend/fullstack only)
 
 ## Configuration
 

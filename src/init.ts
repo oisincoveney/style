@@ -1,48 +1,34 @@
 /**
  * `oisin-dev init`
  *
- * If the current directory is a code project (has package.json / Cargo.toml / go.mod),
- * configure it in place. Otherwise, ask for a project name and scaffold a new subdirectory.
+ * Configures AI agents, coding standards, and dev tools in the current project.
+ * Requires a project root (package.json / Cargo.toml / go.mod / Package.swift).
  */
 
-import { basename, join, resolve } from 'node:path'
+import { basename } from 'node:path'
 import * as p from '@clack/prompts'
 import { type DevConfig, configPath, writeConfig } from './config.js'
 import { detectProject } from './detect.js'
 import { installAll } from './install.js'
 import { type Answers, runPrompts } from './prompts.js'
-import { scaffoldNewProject } from './scaffold.js'
 
 export async function runInit(): Promise<void> {
   p.intro('@oisincoveney/dev')
 
   const cwd = process.cwd()
   const detected = detectProject(cwd)
-  const isProjectRoot = detected.language !== null
 
-  if (isProjectRoot) {
-    // Current dir is a project — configure in place.
-    p.log.info(`Detected ${detected.language} project in ${basename(cwd)}. Configuring in place.`)
-    const answers = await runPrompts({
-      ...detected,
-      scaffoldNew: false,
-      preferProjectName: null,
-    })
-    await writeConfigAndInstall(cwd, answers)
-    p.outro('Done.')
-    return
+  if (detected.language === null) {
+    p.log.error(
+      'Not a project root. Run `oisin-dev init` inside a directory with a package.json, Cargo.toml, go.mod, or Package.swift.',
+    )
+    process.exit(1)
   }
 
-  // Not a project root — scaffold a new subdirectory.
-  p.log.info(`${cwd} is not a project root. Scaffolding a new project here.`)
-  const answers = await runPrompts({
-    ...detected,
-    scaffoldNew: true,
-    preferProjectName: null,
-  })
-  const working = await scaffoldNewProject(cwd, answers)
-  await writeConfigAndInstall(working, answers)
-  p.outro(`Done. cd ${resolve(working)} to get started.`)
+  p.log.info(`Detected ${detected.language} project in ${basename(cwd)}. Configuring in place.`)
+  const answers = await runPrompts(detected)
+  await writeConfigAndInstall(cwd, answers)
+  p.outro('Done.')
 }
 
 async function writeConfigAndInstall(dir: string, answers: Answers): Promise<void> {

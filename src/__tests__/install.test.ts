@@ -8,11 +8,9 @@ import type { Answers } from '../prompts.js'
 import { RULE_SKILLS } from '../skills.js'
 
 const fakeAnswers: Answers = {
-  scaffoldNew: false,
   language: 'rust',
   variant: 'rust-bin',
   framework: null,
-  projectName: '',
   packageManager: 'cargo',
   commands: {
     dev: 'cargo run',
@@ -96,10 +94,10 @@ describe('installAll', () => {
     expect(existsSync(join(dir, 'commitlint.config.cjs'))).toBe(false)
     expect(existsSync(join(dir, '.cargo-mutants.toml'))).toBe(true)
 
-    // Scaffolded example files
-    expect(existsSync(join(dir, 'src/example/mod.rs'))).toBe(true)
-    expect(existsSync(join(dir, 'tests/property_example.rs'))).toBe(true)
-    expect(existsSync(join(dir, 'src/logging.rs'))).toBe(true)
+    // No project scaffolding — install never writes example code
+    expect(existsSync(join(dir, 'src/example/mod.rs'))).toBe(false)
+    expect(existsSync(join(dir, 'tests/property_example.rs'))).toBe(false)
+    expect(existsSync(join(dir, 'src/logging.rs'))).toBe(false)
 
     // CLAUDE.md + AGENTS.md
     expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true)
@@ -178,11 +176,9 @@ describe('installAll', () => {
 
   it('writes correct files for a swift-app project (Pinny-style)', async () => {
     const swiftAnswers: Answers = {
-      scaffoldNew: false,
       language: 'swift',
       variant: 'swift-app',
       framework: 'swiftui',
-      projectName: '',
       packageManager: 'swift',
       commands: {
         dev: '',

@@ -28,7 +28,6 @@ import { generateCursorRules } from './generate/cursor-rules.js'
 import { generateLefthook } from './generate/lefthook.js'
 import { generateLintConfig } from './generate/lint-config.js'
 import { generateOpencodePlugin } from './generate/opencode-plugin.js'
-import { generateProjectScaffolding } from './generate/scaffolding.js'
 import { generateToolConfigs } from './generate/tool-configs.js'
 import { SUPERPOWER_SKILLS } from './skills.js'
 
@@ -39,8 +38,6 @@ const TEMPLATES_DIR = resolve(__dirname, '..', 'templates')
 export interface InstallOptions {
   /** Skip side effects like bd init, MCP registration, plugin installs. Used by tests. */
   skipSideEffects?: boolean
-  /** Skip project scaffolding (example modules, PBT tests, logger). Used by `update`. */
-  skipScaffolding?: boolean
   /** Update mode: merge settings instead of overwriting, skip lefthook and lint/tool configs. */
   isUpdate?: boolean
 }
@@ -155,18 +152,6 @@ export async function installAll(
   mkdirSync(specsDir, { recursive: true })
   writeFileSync(join(specsDir, 'TEMPLATE.md'), specTemplate())
   log('.claude/specs/TEMPLATE.md')
-
-  // Project scaffolding (contract-driven module example, PBT example, logger)
-  if (!options.skipScaffolding) {
-    const scaffolded = generateProjectScaffolding(config)
-    for (const file of scaffolded) {
-      const dest = join(cwd, file.path)
-      if (existsSync(dest)) continue // don't overwrite user code
-      mkdirSync(dirname(dest), { recursive: true })
-      writeFileSync(dest, file.content)
-      log(file.path)
-    }
-  }
 
   // ─── Side-effect installs ───────────────────────────────────────────
 

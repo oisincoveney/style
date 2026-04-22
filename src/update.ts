@@ -3,7 +3,7 @@
  *
  * Re-syncs generated files (hook scripts, .claude/docs/ fragments, settings)
  * from the existing .dev.config.json without running prompts and without
- * touching user-customised files (lefthook.yml, lint configs, scaffolded code).
+ * touching user-customised files (lefthook.yml, lint configs).
  */
 
 import * as p from '@clack/prompts'
@@ -27,7 +27,6 @@ export async function runUpdate(): Promise<void> {
   spinner.start('Updating hooks, docs, and settings')
   await installAll(cwd, config, {} as never, {
     skipSideEffects: true,
-    skipScaffolding: true,
     isUpdate: true,
   })
   spinner.stop('Done')

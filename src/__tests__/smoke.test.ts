@@ -443,7 +443,6 @@ describe('installAll update mode', () => {
       writeFileSync(join(dir, 'lefthook.yml'), customLefthook)
       await installAll(dir, tsFrontendConfig, {} as never, {
         skipSideEffects: true,
-        skipScaffolding: true,
         isUpdate: true,
       })
       const after = readFileSync(join(dir, 'lefthook.yml'), 'utf8')
@@ -471,7 +470,6 @@ describe('installAll update mode', () => {
       writeFileSync(join(claudeDir, 'settings.json'), JSON.stringify(existing, null, 2))
       await installAll(dir, tsFrontendConfig, {} as never, {
         skipSideEffects: true,
-        skipScaffolding: true,
         isUpdate: true,
       })
       const merged = JSON.parse(readFileSync(join(claudeDir, 'settings.json'), 'utf8'))
@@ -510,7 +508,6 @@ describe('installAll update mode', () => {
       writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify(existing, null, 2))
       await installAll(dir, tsFrontendConfig, {} as never, {
         skipSideEffects: true,
-        skipScaffolding: true,
         isUpdate: true,
       })
       const merged = JSON.parse(readFileSync(join(dir, '.claude', 'settings.json'), 'utf8'))
@@ -527,22 +524,4 @@ describe('installAll update mode', () => {
     }
   })
 
-  it('does not write scaffolding files when skipScaffolding is true', async () => {
-    const dir = makeTmpProject({
-      'package.json': JSON.stringify({ name: 'test', scripts: {} }),
-    })
-    try {
-      writeConfig(dir, { ...tsFrontendConfig, contractDriven: true })
-      await installAll(dir, { ...tsFrontendConfig, contractDriven: true }, {} as never, {
-        skipSideEffects: true,
-        skipScaffolding: true,
-        isUpdate: true,
-      })
-      // Contract-driven scaffolding should not be written
-      const { existsSync } = await import('node:fs')
-      expect(existsSync(join(dir, 'src', 'modules', 'example'))).toBe(false)
-    } finally {
-      rmSync(dir, { recursive: true })
-    }
-  })
 })

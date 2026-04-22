@@ -23,11 +23,9 @@ function hasCmd(name: string): boolean {
 }
 
 const answers: Answers = {
-  scaffoldNew: false,
   language: 'rust',
   variant: 'rust-bin',
   framework: null,
-  projectName: '',
   packageManager: 'cargo',
   commands: {
     dev: 'cargo run',
