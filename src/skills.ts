@@ -166,6 +166,10 @@ When the user gives explicit constraints ("use X", "don't do Y", "no Z"), those 
 
 Do not end responses with "Want me to...", "Should I also...", or similar follow-up prompts. If the work is done, state what changed and stop. If there's genuine ambiguity about next steps, name the specific decision rather than open-ended questions.
 
+**One Question at a Time**
+
+When you genuinely need input on more than one thing, ask one at a time rather than stacking them in a single message. Batching is only acceptable for ≤2 very simple, closely related yes/no questions. Anything that requires a judgment call, or three or more open points, must be serialized — resolve one before raising the next.
+
 **Read Before Editing**
 
 Before modifying any non-trivial code, trace the full data flow. Don't apply frontend band-aids when the root cause is backend (or vice versa).
