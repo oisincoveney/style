@@ -28,6 +28,7 @@ import { generateCursorRules } from './generate/cursor-rules.js'
 import { generateLefthook } from './generate/lefthook.js'
 import { generateLintConfig } from './generate/lint-config.js'
 import { generateOpencodePlugin } from './generate/opencode-plugin.js'
+import { generateRules } from './generate/rules.js'
 import { generateToolConfigs } from './generate/tool-configs.js'
 import { SUPERPOWER_SKILLS } from './skills.js'
 
@@ -87,7 +88,7 @@ export async function installAll(
   }
 
   if (config.targets.includes('cursor')) {
-    const rules = generateCursorRules(config)
+    const rules = generateCursorRules(config, TEMPLATES_DIR)
     const rulesDir = join(cwd, '.cursor', 'rules')
     mkdirSync(rulesDir, { recursive: true })
     for (const rule of rules) {
@@ -135,16 +136,20 @@ export async function installAll(
     }
   }
 
-  // CLAUDE.md and AGENTS.md — split into root + fragments via @imports
-  // If existing CLAUDE.md/AGENTS.md present, merge our block into theirs.
+  // CLAUDE.md and AGENTS.md — small kernel; the detail lives in .claude/rules/.
   const bundle = buildClaudeMdBundle(config, answers)
   writeOrMerge(join(cwd, 'CLAUDE.md'), bundle.root, log)
   writeOrMerge(join(cwd, 'AGENTS.md'), bundle.root, log)
-  for (const [path, content] of Object.entries(bundle.fragments)) {
-    const dest = join(cwd, path)
-    mkdirSync(dirname(dest), { recursive: true })
-    writeFileSync(dest, content)
-    log(path)
+
+  // .claude/rules/ — the primary Claude Code context channel.
+  if (config.targets.includes('claude')) {
+    const rulesDir = join(cwd, '.claude', 'rules')
+    mkdirSync(rulesDir, { recursive: true })
+    const rules = generateRules(config, TEMPLATES_DIR)
+    for (const rule of rules) {
+      writeFileSync(join(rulesDir, rule.filename), rule.content)
+      log(`.claude/rules/${rule.filename}`)
+    }
   }
 
   // Specs directory

@@ -6,6 +6,8 @@
  * touching user-customised files (lefthook.yml, lint configs).
  */
 
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import * as p from '@clack/prompts'
 import { readConfig } from './config.js'
 import { installAll } from './install.js'
@@ -19,6 +21,12 @@ export async function runUpdate(): Promise<void> {
   if (!config) {
     p.log.error('No .dev.config.json found. Run `init` first.')
     process.exit(1)
+  }
+
+  if (existsSync(join(cwd, '.claude', 'docs'))) {
+    p.log.warn(
+      'Detected legacy `.claude/docs/` directory. Instructions now live in `.claude/rules/` — review any custom edits, then delete `.claude/docs/`.',
+    )
   }
 
   p.log.info(`Re-syncing ${config.variant} project from .dev.config.json`)

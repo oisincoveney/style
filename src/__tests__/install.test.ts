@@ -115,15 +115,56 @@ describe('installAll', () => {
     expect(parsed.permissions.rules.length).toBeGreaterThan(0)
   })
 
-  it('commands are written to .claude/docs/commands.md and referenced from CLAUDE.md', async () => {
+  it('commands are written to .claude/rules/commands.md; CLAUDE.md stays a kernel', async () => {
     await installAll(dir, fakeConfig, fakeAnswers, { skipSideEffects: true })
     const root = readFileSync(join(dir, 'CLAUDE.md'), 'utf8')
-    expect(root).toContain('@.claude/docs/commands.md')
+    expect(root).not.toContain('@.claude/docs/')
+    expect(root).toContain('.claude/rules/')
     expect(root.split('\n').length).toBeLessThan(50)
 
-    const commands = readFileSync(join(dir, '.claude/docs/commands.md'), 'utf8')
+    const commands = readFileSync(join(dir, '.claude/rules/commands.md'), 'utf8')
     expect(commands).toContain('cargo run')
     expect(commands).toContain('cargo clippy')
+    expect(commands).toMatch(/^---\nname: commands/)
+  })
+
+  it('rule files with paths frontmatter land in .claude/rules/ when the skill is selected', async () => {
+    const frontendAnswers: Answers = {
+      ...fakeAnswers,
+      language: 'typescript',
+      variant: 'ts-frontend',
+      framework: 'react',
+      packageManager: 'bun',
+      skills: [
+        'code-quality',
+        'architecture',
+        'testing',
+        'ai-behavior',
+        'component-patterns',
+        'styling-ui',
+      ],
+    }
+    const frontendConfig: DevConfig = {
+      language: 'typescript',
+      variant: 'ts-frontend',
+      framework: 'react',
+      packageManager: 'bun',
+      commands: frontendAnswers.commands,
+      skills: frontendAnswers.skills,
+      tools: frontendAnswers.tools,
+      workflow: frontendAnswers.workflow,
+      contractDriven: frontendAnswers.contractDriven,
+      targets: frontendAnswers.targets,
+    }
+    await installAll(dir, frontendConfig, frontendAnswers, { skipSideEffects: true })
+
+    const componentRule = readFileSync(join(dir, '.claude/rules/component-patterns.md'), 'utf8')
+    expect(componentRule).toContain('paths:')
+    expect(componentRule).toContain('"**/*.tsx"')
+
+    const codeQuality = readFileSync(join(dir, '.claude/rules/code-quality.md'), 'utf8')
+    expect(codeQuality).not.toContain('paths:')
+    expect(codeQuality).toContain('name: code-quality')
   })
 
   it('merges into existing CLAUDE.md without wiping user content', async () => {
@@ -241,14 +282,15 @@ describe('installAll', () => {
     expect(existsSync(join(dir, 'Tests/PropertyExampleTests/PropertyExampleTests.swift'))).toBe(false)
     expect(existsSync(join(dir, 'Sources/Logging/Logging.swift'))).toBe(false)
 
-    // Commands written to docs
-    const commands = readFileSync(join(dir, '.claude/docs/commands.md'), 'utf8')
+    // Commands written to the new rules dir
+    const commands = readFileSync(join(dir, '.claude/rules/commands.md'), 'utf8')
     expect(commands).toContain('xcodebuild build')
     expect(commands).toContain('swiftlint lint')
 
-    // CLAUDE.md present and references docs
+    // CLAUDE.md is the new kernel — no @imports
     const claude = readFileSync(join(dir, 'CLAUDE.md'), 'utf8')
-    expect(claude).toContain('@.claude/docs/commands.md')
+    expect(claude).not.toContain('@.claude/docs/')
+    expect(claude).toContain('.claude/rules/')
   })
 
   it('does not create .cursor or .codex when not in targets', async () => {

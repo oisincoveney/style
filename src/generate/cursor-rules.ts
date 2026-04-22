@@ -1,7 +1,11 @@
 /**
- * Generates .cursor/rules/*.mdc files from selected rule skills.
+ * Generates .cursor/rules/*.mdc files from the same source markdown as
+ * .claude/rules/. Cursor MDC frontmatter differs (description + globs),
+ * so we transform the frontmatter rather than copy verbatim.
  */
 
+import { readFileSync } from 'node:fs'
+import { basename, resolve } from 'node:path'
 import type { DevConfig } from '../config.js'
 import { RULE_SKILLS } from '../skills.js'
 
@@ -10,21 +14,60 @@ export interface CursorRule {
   content: string
 }
 
-export function generateCursorRules(config: DevConfig): CursorRule[] {
-  const selected = RULE_SKILLS.filter((skill) => config.skills.includes(skill.id))
-  return selected.map((skill) => ({
-    filename: `${skill.id}.mdc`,
-    content: buildCursorRule(skill.name, skill.description, skill.markdownSection, config),
-  }))
+interface RuleFrontmatter {
+  name?: string
+  description?: string
+  paths?: string[]
+  body: string
 }
 
-function buildCursorRule(
-  name: string,
-  description: string,
-  section: string,
-  config: DevConfig,
-): string {
-  const globs = globsForLanguage(config.language)
+export function generateCursorRules(config: DevConfig, templatesDir: string): CursorRule[] {
+  const selected = RULE_SKILLS.filter((skill) => config.skills.includes(skill.id))
+  return selected.map((skill) => {
+    const source = resolve(templatesDir, 'rules', basename(skill.sourceFile))
+    const raw = readFileSync(source, 'utf8')
+    const { description, paths, body } = parseFrontmatter(raw)
+    const globs = paths && paths.length > 0 ? paths : globsForLanguage(config.language)
+    return {
+      filename: `${skill.id}.mdc`,
+      content: buildCursorRule(skill.name, description ?? skill.description, globs, body),
+    }
+  })
+}
+
+function parseFrontmatter(raw: string): RuleFrontmatter {
+  if (!raw.startsWith('---\n')) return { body: raw }
+  const end = raw.indexOf('\n---\n', 4)
+  if (end === -1) return { body: raw }
+  const yaml = raw.slice(4, end)
+  const body = raw.slice(end + 5)
+
+  const fm: RuleFrontmatter = { body }
+  const lines = yaml.split('\n')
+  let currentKey: string | null = null
+  const pathItems: string[] = []
+  for (const line of lines) {
+    if (line.startsWith('  - ')) {
+      if (currentKey === 'paths') {
+        pathItems.push(line.slice(4).trim().replace(/^["']|["']$/g, ''))
+      }
+      continue
+    }
+    const match = line.match(/^([a-zA-Z_-]+):\s*(.*)$/)
+    if (!match) continue
+    const [, key, value] = match
+    currentKey = key
+    if (key === 'name') fm.name = value.trim()
+    else if (key === 'description') fm.description = value.trim()
+    else if (key === 'paths' && value.trim().length === 0) {
+      // multi-line list follows
+    }
+  }
+  if (pathItems.length > 0) fm.paths = pathItems
+  return fm
+}
+
+function buildCursorRule(name: string, description: string, globs: string[], body: string): string {
   return `---
 description: ${description}
 globs: ${JSON.stringify(globs)}
@@ -32,7 +75,7 @@ globs: ${JSON.stringify(globs)}
 
 # ${name}
 
-${section.replace(/^## .*\n/, '').trim()}
+${body.replace(/^#\s.*\n\n?/, '').trim()}
 `
 }
 
