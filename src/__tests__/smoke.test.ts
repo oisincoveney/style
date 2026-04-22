@@ -122,6 +122,14 @@ describe('generateClaudeSettings', () => {
     expect(settings.hooks.PostToolUse).toBeDefined()
     expect(settings.hooks.SessionStart).toBeDefined()
     expect(settings.hooks.Stop).toBeDefined()
+    expect(settings.hooks.PreCompact).toBeDefined()
+  })
+
+  it('registers pre-compact-prime.sh on PreCompact', () => {
+    const settings = generateClaudeSettings(tsFrontendConfig)
+    const entries = settings.hooks.PreCompact ?? []
+    const commands = entries.flatMap((e) => e.hooks.map((h) => h.command))
+    expect(commands.some((c) => c.includes('pre-compact-prime.sh'))).toBe(true)
   })
 
   it('blocks destructive commands in permission rules', () => {

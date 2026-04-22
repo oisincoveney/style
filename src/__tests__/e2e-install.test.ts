@@ -95,6 +95,7 @@ describe('end-to-end install with real side effects', () => {
       'post-edit-check.sh',
       'context-injector.sh',
       'context-bootstrap.sh',
+      'pre-compact-prime.sh',
       'pre-stop-verification.sh',
       'ai-antipattern-guard.sh',
       'tdd-guard.sh',

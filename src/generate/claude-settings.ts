@@ -22,6 +22,7 @@ interface ClaudeSettings {
     PostToolUse?: Hook[]
     SessionStart?: Hook[]
     Stop?: Hook[]
+    PreCompact?: Hook[]
   }
   permissions: {
     mode: string
@@ -90,6 +91,11 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
       Stop: [
         {
           hooks: [hook('pre-stop-verification.sh', 30)],
+        },
+      ],
+      PreCompact: [
+        {
+          hooks: [hook('pre-compact-prime.sh', 10)],
         },
       ],
     },
