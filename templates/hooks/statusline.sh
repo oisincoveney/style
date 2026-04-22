@@ -23,5 +23,14 @@ if command -v bd >/dev/null 2>&1; then
   fi
 fi
 
-IFS=" · "
-printf '%s\n' "${parts[*]}"
+# Bash ${arr[*]} joins with the first char of IFS only, so ' · ' would
+# collapse to a space. Build the string manually.
+out=""
+for p in "${parts[@]}"; do
+  if [[ -z "$out" ]]; then
+    out="$p"
+  else
+    out="$out · $p"
+  fi
+done
+printf '%s\n' "$out"
