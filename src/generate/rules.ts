@@ -49,21 +49,36 @@ export function generateRules(config: DevConfig, templatesDir: string): RuleFile
 }
 
 function commandsRule(config: DevConfig): string {
-  const e2eLine = config.commands.e2e ? `\ne2e:       ${config.commands.e2e}` : ''
-  return `---
+  const header = `---
 name: commands
 description: Canonical build/test/lint commands for this project
 ---
 
 # Commands
+`
 
+  const entries: Array<[string, string | null | undefined]> = [
+    ['dev', config.commands.dev],
+    ['build', config.commands.build],
+    ['test', config.commands.test],
+    ['typecheck', config.commands.typecheck],
+    ['lint', config.commands.lint],
+    ['format', config.commands.format],
+    ['e2e', config.commands.e2e],
+  ]
+  const rendered = entries
+    .filter(([, value]) => typeof value === 'string' && value.length > 0)
+    .map(([key, value]) => `${`${key}:`.padEnd(11)}${value as string}`)
+
+  if (rendered.length === 0) {
+    return `${header}
+Commands are not set yet. Run \`oisin-dev set-commands\` once you know the dev/build/test commands for this project.
+`
+  }
+
+  return `${header}
 \`\`\`
-dev:       ${config.commands.dev}
-build:     ${config.commands.build}
-test:      ${config.commands.test}
-typecheck: ${config.commands.typecheck}
-lint:      ${config.commands.lint}
-format:    ${config.commands.format}${e2eLine}
+${rendered.join('\n')}
 \`\`\`
 
 Use these exact commands. Do not guess alternatives like \`docker compose up\`, \`npm start\`, etc.

@@ -20,6 +20,22 @@ export function generateLefthook(config: DevConfig): string {
   const test = config.commands.test
   const e2e = config.commands.e2e
 
+  const typecheckStep = typecheck
+    ? `    typecheck:
+      run: ${typecheck}
+`
+    : ''
+  const lintStep = lint
+    ? `    lint:
+      run: ${lint}
+`
+    : ''
+  const testStep = test
+    ? `    test:
+      run: ${test}
+`
+    : ''
+
   const playwrightStep =
     isFrontendVariant(config.variant) && e2e
       ? `    playwright:
@@ -114,18 +130,12 @@ commit-msg:
 pre-commit:
   parallel: true
   commands:
-${tsStyleGuardStep}    typecheck:
-      run: ${typecheck}
-    lint:
-      run: ${lint}
-    tdd-guard:
+${tsStyleGuardStep}${typecheckStep}${lintStep}    tdd-guard:
       run: .claude/hooks/tdd-guard.sh
 
 pre-push:
   commands:
-    test:
-      run: ${test}
-${playwrightStep}    pr-size-check:
+${testStep}${playwrightStep}    pr-size-check:
       run: .claude/hooks/pr-size-check.sh
     semgrep:
       run: |

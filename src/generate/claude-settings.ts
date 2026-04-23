@@ -52,6 +52,20 @@ function hook(script: string, timeout?: number): HookCommand {
 }
 
 export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
+  const verificationCommands = [
+    config.commands.typecheck,
+    config.commands.lint,
+    config.commands.test,
+  ].filter((cmd): cmd is string => typeof cmd === 'string' && cmd.length > 0)
+
+  const verificationAllowPattern = [
+    ...verificationCommands,
+    'git status',
+    'git diff',
+    'git log',
+    'bd *',
+  ].join('|')
+
   const settings: ClaudeSettings = {
     hooks: {
       SessionStart: [
@@ -134,7 +148,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
         {
           tool: 'Bash',
           decision: 'allow',
-          if: `Bash(${config.commands.typecheck}|${config.commands.lint}|${config.commands.test}|git status|git diff|git log|bd *)`,
+          if: `Bash(${verificationAllowPattern})`,
           reason: 'Safe verification and task tracking',
         },
         {

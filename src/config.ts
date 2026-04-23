@@ -18,13 +18,13 @@ export interface DevConfig {
   framework: string | null
   packageManager: PackageManager
   commands: {
-    dev: string
-    build: string
-    test: string
-    typecheck: string
-    lint: string
-    format: string
-    e2e?: string
+    dev: string | null
+    build: string | null
+    test: string | null
+    typecheck: string | null
+    lint: string | null
+    format: string | null
+    e2e?: string | null
   }
   skills: ReadonlyArray<string>
   tools: ReadonlyArray<string>

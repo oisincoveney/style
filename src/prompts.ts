@@ -26,13 +26,13 @@ export interface Answers {
   framework: string | null
   packageManager: PackageManager
   commands: {
-    dev: string
-    build: string
-    test: string
-    typecheck: string
-    lint: string
-    format: string
-    e2e?: string
+    dev: string | null
+    build: string | null
+    test: string | null
+    typecheck: string | null
+    lint: string | null
+    format: string | null
+    e2e?: string | null
   }
   skills: ReadonlyArray<string>
   tools: ReadonlyArray<string>
@@ -126,16 +126,27 @@ export async function runPrompts(detected: Detected): Promise<Answers> {
   const defaults = defaultCommandsFor(variant, packageManager, detected)
 
   const commands: Answers['commands'] = {
-    dev: await askCommand('Dev command (how to run the app)?', defaults.dev),
-    build: await askCommand('Build command?', defaults.build),
-    test: await askCommand('Test command?', defaults.test),
-    typecheck: await askCommand('Typecheck command?', defaults.typecheck),
-    lint: await askCommand('Lint command?', defaults.lint),
-    format: await askCommand('Format command?', defaults.format),
+    dev: await askOptionalCommand('Dev command (how to run the app)?', defaults.dev),
+    build: await askOptionalCommand('Build command?', defaults.build),
+    test: await askOptionalCommand('Test command?', defaults.test),
+    typecheck: await askOptionalCommand('Typecheck command?', defaults.typecheck),
+    lint: await askOptionalCommand('Lint command?', defaults.lint),
+    format: await askOptionalCommand('Format command?', defaults.format),
   }
 
   if (variant === 'ts-frontend' || variant === 'ts-fullstack') {
     commands.e2e = await askCommand('Browser test command (Playwright)?', 'playwright test')
+  }
+
+  const allCommandsUnset =
+    commands.dev === null &&
+    commands.build === null &&
+    commands.test === null &&
+    commands.typecheck === null &&
+    commands.lint === null &&
+    commands.format === null
+  if (allCommandsUnset) {
+    p.log.info('No commands configured yet. Run `oisin-dev set-commands` once you know them.')
   }
 
   const ruleSkills = ruleSkillsForVariant(variant)
@@ -347,7 +358,7 @@ async function resolveModelProfile(
   }
 }
 
-async function askCommand(message: string, defaultValue: string): Promise<string> {
+export async function askCommand(message: string, defaultValue: string): Promise<string> {
   const value = cancelGuard(
     await p.text({
       message,
@@ -356,6 +367,14 @@ async function askCommand(message: string, defaultValue: string): Promise<string
     }),
   )
   return value.length === 0 ? defaultValue : value
+}
+
+export async function askOptionalCommand(
+  message: string,
+  defaultValue: string | null,
+): Promise<string | null> {
+  if (defaultValue === null || defaultValue.length === 0) return null
+  return askCommand(message, defaultValue)
 }
 
 function languageForVariant(variant: ProjectVariant): Language {
@@ -382,7 +401,7 @@ function resolvePackageManager(detected: Detected, language: Language): PackageM
   }
 }
 
-function defaultCommandsFor(
+export function defaultCommandsFor(
   variant: ProjectVariant,
   pm: PackageManager,
   detected: Detected,
@@ -437,12 +456,12 @@ function defaultCommandsFor(
 
   if (variant.startsWith('other-')) {
     return {
-      dev: d.dev ?? '',
-      build: d.build ?? '',
-      test: d.test ?? '',
-      typecheck: d.typecheck ?? '',
-      lint: d.lint ?? '',
-      format: d.format ?? '',
+      dev: d.dev,
+      build: d.build,
+      test: d.test,
+      typecheck: d.typecheck,
+      lint: d.lint,
+      format: d.format,
     }
   }
 

@@ -327,4 +327,69 @@ describe('installAll', () => {
     expect(existsSync(join(dir, '.codex'))).toBe(false)
     expect(existsSync(join(dir, '.claude'))).toBe(true)
   })
+
+  describe('with all commands null (other-app path)', () => {
+    const otherConfig: DevConfig = {
+      ...fakeConfig,
+      language: 'other',
+      variant: 'other-app',
+      packageManager: 'other',
+      commands: {
+        dev: null,
+        build: null,
+        test: null,
+        typecheck: null,
+        lint: null,
+        format: null,
+      },
+    }
+    const otherAnswers: Answers = {
+      ...fakeAnswers,
+      language: 'other',
+      variant: 'other-app',
+      packageManager: 'other',
+      commands: otherConfig.commands,
+    }
+
+    it('commands.md emits the "not set yet" stub', async () => {
+      await installAll(dir, otherConfig, otherAnswers, { skipSideEffects: true })
+      const commands = readFileSync(join(dir, '.claude/rules/commands.md'), 'utf8')
+      expect(commands).toContain('Commands are not set yet')
+      expect(commands).toContain('oisin-dev set-commands')
+      expect(commands).not.toMatch(/^dev:\s*$/m)
+      expect(commands).not.toMatch(/^test:\s*$/m)
+    })
+
+    it('lefthook.yml has no empty `run:` lines and omits command-dependent steps', async () => {
+      await installAll(dir, otherConfig, otherAnswers, { skipSideEffects: true })
+      const lefthook = readFileSync(join(dir, 'lefthook.yml'), 'utf8')
+      expect(lefthook).not.toMatch(/^\s*run:\s*$/m)
+      expect(lefthook).not.toContain('run: \n')
+      expect(lefthook).not.toMatch(/typecheck:\s*\n\s*run:\s*\n/)
+      expect(lefthook).not.toMatch(/lint:\s*\n\s*run:\s*\n/)
+      expect(lefthook).not.toMatch(/^\s{4}test:\s*\n\s*run:\s*\n/m)
+      expect(lefthook).toContain('tdd-guard')
+      expect(lefthook).toContain('pr-size-check')
+      expect(lefthook).toContain('conventional-commits')
+    })
+
+    it('claude settings Bash allow rule has no empty alternatives', async () => {
+      await installAll(dir, otherConfig, otherAnswers, { skipSideEffects: true })
+      const raw = readFileSync(join(dir, '.claude/settings.json'), 'utf8')
+      const parsed = JSON.parse(raw) as {
+        permissions: { rules: Array<{ tool: string; decision: string; if?: string }> }
+      }
+      const allowRules = parsed.permissions.rules.filter(
+        (r) => r.tool === 'Bash' && r.decision === 'allow' && r.if !== undefined,
+      )
+      for (const rule of allowRules) {
+        expect(rule.if).not.toMatch(/\|\|/)
+        expect(rule.if).not.toMatch(/\(\|/)
+        expect(rule.if).not.toMatch(/\|\)/)
+      }
+      const verificationRule = allowRules.find((r) => r.if?.includes('git status'))
+      expect(verificationRule).toBeDefined()
+      expect(verificationRule?.if).toBe('Bash(git status|git diff|git log|bd *)')
+    })
+  })
 })
