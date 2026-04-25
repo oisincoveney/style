@@ -88,6 +88,16 @@
             "type": "command",
             "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/pre-stop-verification.sh",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/banned-words-guard.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel)\" && .claude/hooks/verify-grounding.sh",
+            "timeout": 10
           }
         ]
       }
