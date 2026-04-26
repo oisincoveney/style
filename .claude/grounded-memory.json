@@ -1,0 +1,71 @@
+{
+  "version": 2,
+  "loopPatterns": {
+    "aa02b908": {
+      "preview": "Read({\"file_path\":\"/Users/oisin/.bun/install/global/node_modules/)",
+      "count": 1,
+      "lastSeen": 1777123754127
+    },
+    "a470c00b": {
+      "preview": "Bash({\"command\":\"GROUNDED_BIN=$(command -v grounded)\\nGROUNDED_HO)",
+      "count": 1,
+      "lastSeen": 1777123781509
+    },
+    "976c2fb5": {
+      "preview": "Bash({\"command\":\"GROUNDED_BIN=$(command -v grounded)\\nGROUNDED_DI)",
+      "count": 1,
+      "lastSeen": 1777123791830
+    },
+    "ff013a8b": {
+      "preview": "Read({\"file_path\":\"/Users/oisin/.bun/install/global/node_modules/)",
+      "count": 1,
+      "lastSeen": 1777123799767
+    },
+    "b55fa551": {
+      "preview": "Bash({\"command\":\"GROUNDED_BIN=$(command -v grounded)\\nGROUNDED_DI)",
+      "count": 1,
+      "lastSeen": 1777123821724
+    },
+    "1435963c": {
+      "preview": "Bash({\"command\":\"mkdir -p /Users/oisin/dev/style-template/scripts)",
+      "count": 1,
+      "lastSeen": 1777123928599
+    },
+    "5a4634e": {
+      "preview": "Write({\"file_path\":\"/Users/oisin/dev/style-template/scripts/verify)",
+      "count": 1,
+      "lastSeen": 1777123941120
+    },
+    "24813a40": {
+      "preview": "Bash({\"command\":\"bun run scripts/verify-grounded-install.ts 2>&1 )",
+      "count": 1,
+      "lastSeen": 1777123946208
+    },
+    "ca08b3e4": {
+      "preview": "Read({\"file_path\":\"/Users/oisin/dev/style-template/src/config.ts\")",
+      "count": 1,
+      "lastSeen": 1777123950022
+    },
+    "17c391b6": {
+      "preview": "Bash({\"command\":\"grep -n \\\"tsFrontendConfig\\\\|frontendConfig\\\\|sw)",
+      "count": 1,
+      "lastSeen": 1777123953497
+    },
+    "82d0710d": {
+      "preview": "Read({\"file_path\":\"/Users/oisin/dev/style-template/src/__tests__/)",
+      "count": 1,
+      "lastSeen": 1777123956771
+    },
+    "d3af6fb8": {
+      "preview": "Edit({\"file_path\":\"/Users/oisin/dev/style-template/scripts/verify)",
+      "count": 1,
+      "lastSeen": 1777123965343
+    },
+    "618f9904": {
+      "preview": "Bash({\"command\":\"bun run scripts/verify-grounded-install.ts 2>&1 )",
+      "count": 1,
+      "lastSeen": 1777123969979
+    }
+  },
+  "editErrors": {}
+}
