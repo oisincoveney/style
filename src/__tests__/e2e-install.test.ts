@@ -5,12 +5,17 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DevConfig } from '../config.js'
-import { configureBeadsAfterInit, installAll, installBeadsCli } from '../install.js'
+import {
+  configureBeadsAfterInit,
+  installAll,
+  installBeadsCli,
+  trimBeadsIntegrationBlock,
+} from '../install.js'
 import type { Answers } from '../prompts.js'
 
 const answers: Answers = {
@@ -128,6 +133,57 @@ describe('end-to-end install with real side effects', () => {
     },
     BD_INIT_TIMEOUT_MS,
   )
+
+  it('trimBeadsIntegrationBlock removes Session Completion section', () => {
+    const path = join(dir, 'AGENTS.md')
+    const original = `# Header
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:abc -->
+## Beads Issue Tracker
+
+### Quick Reference
+some content
+
+### Rules
+- Use bd
+
+## Session Completion
+
+**MANDATORY**: push to remote.
+
+1. PUSH TO REMOTE — git push
+<!-- END BEADS INTEGRATION -->
+`
+    writeFileSync(path, original)
+    trimBeadsIntegrationBlock(path)
+    const trimmed = readFileSync(path, 'utf8')
+    expect(trimmed).toContain('Quick Reference')
+    expect(trimmed).toContain('### Rules')
+    expect(trimmed).not.toContain('Session Completion')
+    expect(trimmed).not.toContain('MANDATORY')
+    expect(trimmed).not.toContain('PUSH TO REMOTE')
+    expect(trimmed).toContain('<!-- END BEADS INTEGRATION -->')
+  })
+
+  it('trimBeadsIntegrationBlock is a no-op when block is missing', () => {
+    const path = join(dir, 'AGENTS.md')
+    const original = '# Just a header\n\nNo bd block here.\n'
+    writeFileSync(path, original)
+    trimBeadsIntegrationBlock(path)
+    expect(readFileSync(path, 'utf8')).toBe(original)
+  })
+
+  it('trimBeadsIntegrationBlock is a no-op when Session Completion is already absent', () => {
+    const path = join(dir, 'AGENTS.md')
+    const original = `<!-- BEGIN BEADS INTEGRATION v:1 -->
+## Beads Issue Tracker
+just rules, no session completion
+<!-- END BEADS INTEGRATION -->
+`
+    writeFileSync(path, original)
+    trimBeadsIntegrationBlock(path)
+    expect(readFileSync(path, 'utf8')).toBe(original)
+  })
 
   it('generates all target files with valid content', async () => {
     await installAll(dir, config, answers, { skipSideEffects: true })

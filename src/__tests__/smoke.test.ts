@@ -597,6 +597,150 @@ describe('generateRules', () => {
   })
 })
 
+describe('generateCommands — bd-native /epic', () => {
+  it('generates /epic with EARS template and bd create stdin pattern', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
+    const cmds = generateCommands(cfg)
+    const epic = cmds.find((c) => c.filename === 'epic.md')
+    expect(epic).toBeDefined()
+    expect(epic?.content).toContain('EARS')
+    expect(epic?.content).toContain('Success Criteria')
+    expect(epic?.content).toContain('bd create --type=epic')
+    expect(epic?.content).toContain('--body-file=-')
+    expect(epic?.content).toContain('[NEEDS CLARIFICATION')
+    expect(epic?.content).not.toContain('.claude/specs/')
+    expect(epic?.content).toContain('Do NOT call')
+    expect(epic?.content).toContain('--claim')
+    expect(epic?.content).toContain('/work-next')
+  })
+
+  it('omits /epic when beads is not in tools', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
+    const cmds = generateCommands(cfg)
+    expect(cmds.some((c) => c.filename === 'epic.md')).toBe(false)
+  })
+
+  it('omits legacy /spec when beads is enabled (replaced by /epic)', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
+    const cmds = generateCommands(cfg)
+    expect(cmds.some((c) => c.filename === 'spec.md')).toBe(false)
+    const planCmd = cmds.find((c) => c.filename === 'plan.md')
+    const researchCmd = cmds.find((c) => c.filename === 'research.md')
+    expect(planCmd?.content).toContain('bd update')
+    expect(researchCmd?.content).toContain('bd remember')
+  })
+
+  it('generates /work-next with claim + acceptance read-back contract', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
+    const cmds = generateCommands(cfg)
+    const wn = cmds.find((c) => c.filename === 'work-next.md')
+    expect(wn).toBeDefined()
+    expect(wn?.content).toContain('bd ready --json')
+    expect(wn?.content).toContain('bd show')
+    expect(wn?.content).toContain('--status in_progress')
+    expect(wn?.content).toContain('Acceptance Criteria')
+    expect(wn?.content).toContain('Verification Commands')
+    expect(wn?.content).toContain('NEEDS CLARIFICATION')
+    expect(wn?.content).toContain('halt')
+  })
+
+  it('generates /verify-spec that spawns a fresh-context subagent', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
+    const cmds = generateCommands(cfg)
+    const v = cmds.find((c) => c.filename === 'verify-spec.md')
+    expect(v).toBeDefined()
+    expect(v?.content).toContain('subagent_type=general-purpose')
+    expect(v?.content).toContain('PASS')
+    expect(v?.content).toContain('FAIL')
+    expect(v?.content).toContain('PARTIAL')
+    expect(v?.content).toContain('bd show')
+    expect(v?.content).toContain('bd note')
+    expect(v?.content).toContain('Verification Commands')
+    expect(v?.content).toContain('DO NOT call')
+  })
+
+  it('generates /discover with discovered-from edge to current claim', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
+    const cmds = generateCommands(cfg)
+    const dc = cmds.find((c) => c.filename === 'discover.md')
+    expect(dc).toBeDefined()
+    expect(dc?.content).toContain('discovered-from')
+    expect(dc?.content).toContain('in_progress')
+    expect(dc?.content).toContain('audit trail')
+  })
+
+  it('generates bd-native /plan that writes to design field, not disk', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
+    const cmds = generateCommands(cfg)
+    const pc = cmds.find((c) => c.filename === 'plan.md')
+    expect(pc).toBeDefined()
+    expect(pc?.content).toContain('--design')
+    expect(pc?.content).toContain('bd update')
+    expect(pc?.content).not.toContain('.claude/plans/YYYY-MM-DD')
+  })
+
+  it('generates bd-native /research with memory-or-spike branching', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
+    const cmds = generateCommands(cfg)
+    const rc = cmds.find((c) => c.filename === 'research.md')
+    expect(rc).toBeDefined()
+    expect(rc?.content).toContain('bd remember')
+    expect(rc?.content).toContain('bd create --type=spike')
+    expect(rc?.content).toContain('WebFetch')
+    expect(rc?.content).not.toContain('docs/research/YYYY-MM-DD')
+  })
+
+  it('generates /decision that calls bd decision record', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
+    const cmds = generateCommands(cfg)
+    const dec = cmds.find((c) => c.filename === 'decision.md')
+    expect(dec).toBeDefined()
+    expect(dec?.content).toContain('bd decision record')
+    expect(dec?.content).toContain('--rationale')
+    expect(dec?.content).toContain('--alternatives-considered')
+    expect(dec?.content).toContain('Do NOT create')
+  })
+
+  it('generates /bd-hygiene with read-only triage commands', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
+    const cmds = generateCommands(cfg)
+    const hyg = cmds.find((c) => c.filename === 'bd-hygiene.md')
+    expect(hyg).toBeDefined()
+    expect(hyg?.content).toContain('bd doctor')
+    expect(hyg?.content).toContain('bd stale')
+    expect(hyg?.content).toContain('bd lint')
+    expect(hyg?.content).toContain('bd count --status open')
+    expect(hyg?.content).toContain('200')
+    expect(hyg?.content).toContain('Do NOT run')
+  })
+
+  it('omits /work-next when beads is not in tools', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
+    const cmds = generateCommands(cfg)
+    expect(cmds.some((c) => c.filename === 'work-next.md')).toBe(false)
+  })
+
+  it('keeps legacy /spec /plan /research when beads is not in tools', async () => {
+    const { generateCommands } = await import('../generate/commands.js')
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
+    const cmds = generateCommands(cfg)
+    expect(cmds.some((c) => c.filename === 'spec.md')).toBe(true)
+    expect(cmds.some((c) => c.filename === 'plan.md')).toBe(true)
+    expect(cmds.some((c) => c.filename === 'research.md')).toBe(true)
+  })
+})
+
 describe('installAll update mode', () => {
   function makeTmpProject(files: Record<string, string>): string {
     const dir = mkdtempSync(join(tmpdir(), 'style-template-update-test-'))

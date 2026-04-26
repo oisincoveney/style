@@ -643,7 +643,29 @@ export function configureBeadsAfterInit(cwd: string): BeadsConfigureResult {
     return { ok: false, error: runFailureMessage(hooks) }
   }
 
+  for (const file of ['AGENTS.md', 'CLAUDE.md']) {
+    const path = join(cwd, file)
+    if (existsSync(path)) {
+      trimBeadsIntegrationBlock(path)
+    }
+  }
+
   return { ok: true }
+}
+
+export function trimBeadsIntegrationBlock(path: string): void {
+  const raw = readFileSync(path, 'utf8')
+  const begin = raw.indexOf('<!-- BEGIN BEADS INTEGRATION')
+  const end = raw.indexOf('<!-- END BEADS INTEGRATION -->')
+  if (begin === -1 || end === -1) return
+
+  const sessionStart = raw.indexOf('## Session Completion', begin)
+  if (sessionStart === -1 || sessionStart > end) return
+
+  const replacement =
+    '- Pushing to remote is the user\'s call, not the agent\'s. Project policy stands: never push without explicit user approval.\n'
+  const trimmed = raw.slice(0, sessionStart) + replacement + raw.slice(end)
+  writeFileSync(path, trimmed)
 }
 
 /**

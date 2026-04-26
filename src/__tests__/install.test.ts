@@ -143,10 +143,11 @@ describe('installAll', () => {
     expect(verify).toContain(fakeConfig.commands.test)
     expect(verify).toContain('disable-model-invocation: true')
 
-    // /ready command exists when beads is enabled
+    // /ready and /epic commands exist when beads is enabled
     expect(existsSync(join(dir, '.claude/commands/ready.md'))).toBe(true)
-    // /spec command always
-    expect(existsSync(join(dir, '.claude/commands/spec.md'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/commands/epic.md'))).toBe(true)
+    // /spec is the legacy command — replaced by /epic when beads is enabled
+    expect(existsSync(join(dir, '.claude/commands/spec.md'))).toBe(false)
 
     // Hook file for statusLine copied
     expect(existsSync(join(dir, '.claude/hooks/statusline.sh'))).toBe(true)
