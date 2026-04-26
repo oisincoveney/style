@@ -170,6 +170,14 @@ export async function installAll(
 
   // ─── Side-effect installs ───────────────────────────────────────────
 
+  // Strip scope-guard unconditionally — it false-positives on read commands
+  // whose paths contain "install" and caches a stale projectRoot per pid.
+  // Runs on update too (skipSideEffects=true) so users get the fix without
+  // a full reinstall of grounded.
+  if (config.targets.includes('claude')) {
+    pruneScopeGuardHook(join(homedir(), '.claude', 'settings.json'), log, warn)
+  }
+
   if (options.skipSideEffects) return
 
   if (config.targets.includes('claude')) {
@@ -297,6 +305,7 @@ function installGroundedHooks(
   const direct = spawnSync('grounded', ['install'], { cwd, stdio: 'pipe', encoding: 'utf8' })
   if (direct.status === 0) {
     log('@pinperepette/grounded hooks → ~/.claude/settings.json')
+    pruneScopeGuardHook(join(homedir(), '.claude', 'settings.json'), log, warn)
     return
   }
   if (commandExists('mise')) {
@@ -307,12 +316,56 @@ function installGroundedHooks(
     })
     if (viaMise.status === 0) {
       log('@pinperepette/grounded hooks → ~/.claude/settings.json (via mise exec)')
+      pruneScopeGuardHook(join(homedir(), '.claude', 'settings.json'), log, warn)
       return
     }
     warn(`grounded install failed (direct + mise exec): ${viaMise.stderr || viaMise.stdout}`)
     return
   }
   warn(`grounded install failed: ${direct.stderr || direct.stdout}`)
+}
+
+/**
+ * Removes grounded's scope-guard PreToolUse entry from ~/.claude/settings.json.
+ *
+ * scope-guard's Bash matcher uses a write-verb regex that includes `\binstall\b`,
+ * which false-positives on read commands whose paths contain "install" (e.g.
+ * anything under ~/.bun/install/...). It also caches projectRoot per-pid in
+ * /tmp and never refreshes, so worktree-relocated sessions get blocked on
+ * legitimate writes. Until grounded fixes both, we strip it after every
+ * `grounded install`. The remaining 10 hooks stay registered.
+ */
+interface ClaudeSettings {
+  hooks?: {
+    PreToolUse?: Array<{ hooks?: Array<{ command?: string }> }>
+    [key: string]: unknown
+  }
+  [key: string]: unknown
+}
+
+export function pruneScopeGuardHook(
+  settingsPath: string,
+  log: (msg: string) => void,
+  warn: (msg: string) => void,
+): boolean {
+  if (!existsSync(settingsPath)) return false
+  let settings: ClaudeSettings
+  try {
+    settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as ClaudeSettings
+  } catch (e) {
+    warn(`scope-guard prune: ${settingsPath} is not valid JSON: ${(e as Error).message}`)
+    return false
+  }
+  const pre = settings.hooks?.PreToolUse
+  if (!pre) return false
+  const filtered = pre.filter(
+    (entry) => !(entry.hooks ?? []).some((h) => h.command?.includes('scope-guard.js')),
+  )
+  if (filtered.length === pre.length) return false
+  settings.hooks = { ...settings.hooks, PreToolUse: filtered }
+  writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`)
+  log('removed scope-guard from ~/.claude/settings.json')
+  return true
 }
 
 function installCodexHooks(cwd: string, log: (msg: string) => void): void {
@@ -713,10 +766,34 @@ function writeJson(path: string, data: unknown): void {
 
 type HookEntry = { matcher?: string; hooks: { type: string; command: string; timeout?: number }[] }
 
+/** Hook scripts that were once shipped but have been retired. Entries are
+ * stripped from existing settings.json on update so stale references don't
+ * survive the merge. */
+const RETIRED_HOOK_SCRIPTS = new Set(['verify-grounding.sh'])
+
 /** Extracts the .claude/hooks/foo.sh filename from a hook command, regardless of prefix. */
 function extractHookScript(command: string): string | null {
   const match = command.match(/\.claude\/hooks\/([^\s'"]+)/)
   return match ? match[1] : null
+}
+
+function pruneRetiredHooks(hooks: Record<string, HookEntry[]>): Record<string, HookEntry[]> {
+  const result: Record<string, HookEntry[]> = {}
+  for (const [event, entries] of Object.entries(hooks)) {
+    const filteredEntries = entries
+      .map((entry) => ({
+        ...entry,
+        hooks: entry.hooks.filter((h) => {
+          const script = extractHookScript(h.command)
+          return script === null || !RETIRED_HOOK_SCRIPTS.has(script)
+        }),
+      }))
+      .filter((entry) => entry.hooks.length > 0)
+    if (filteredEntries.length > 0) {
+      result[event] = filteredEntries
+    }
+  }
+  return result
 }
 
 function writeOrMergeSettings(
@@ -731,7 +808,7 @@ function writeOrMergeSettings(
   }
 
   const existing = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
-  const existingHooks = (existing.hooks ?? {}) as Record<string, HookEntry[]>
+  const existingHooks = pruneRetiredHooks((existing.hooks ?? {}) as Record<string, HookEntry[]>)
   const generatedHooks = generated.hooks as Record<string, HookEntry[]>
 
   // Merge hook events:
