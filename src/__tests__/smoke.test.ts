@@ -173,6 +173,25 @@ describe('generateClaudeSettings', () => {
     expect(allowRule?.if).toContain('vp check')
   })
 
+  describe('require-claim hook (beadsWorkflow.requireClaim)', () => {
+    it('omits require-claim.sh from PreToolUse when requireClaim is unset', () => {
+      const settings = generateClaudeSettings(tsFrontendConfig)
+      const pre = JSON.stringify(settings.hooks.PreToolUse ?? [])
+      expect(pre).not.toContain('require-claim.sh')
+    })
+
+    it('registers require-claim.sh on PreToolUse Write|Edit when requireClaim is true', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, beadsWorkflow: { requireClaim: true } }
+      const settings = generateClaudeSettings(cfg)
+      const writeEntry = (settings.hooks.PreToolUse ?? []).find(
+        (e) => e.matcher === 'Write|Edit',
+      )
+      expect(writeEntry).toBeDefined()
+      const commands = writeEntry?.hooks.map((h) => h.command) ?? []
+      expect(commands.some((c) => c.includes('require-claim.sh'))).toBe(true)
+    })
+  })
+
   describe('multi-event hook coverage (enforcement.multiEvent)', () => {
     it('registers ai-antipattern-guard.sh only on PreToolUse when multiEvent is unset', () => {
       const settings = generateClaudeSettings(tsFrontendConfig)
@@ -533,6 +552,25 @@ describe('generateRules', () => {
     expect(workflow?.content).toContain('Intent-Driven Development')
   })
 
+  it('emits bd-native workflow when workflow is bd', () => {
+    const cfg: DevConfig = { ...tsFrontendConfig, workflow: 'bd' as never }
+    const rules = generateRules(cfg, TEMPLATES_DIR)
+    const workflow = rules.find((r) => r.filename === 'workflow.md')
+    expect(workflow?.content).toContain('bd is the source of truth')
+    expect(workflow?.content).toContain('/epic')
+    expect(workflow?.content).toContain('/work-next')
+    expect(workflow?.content).toContain('/verify-spec')
+    expect(workflow?.content).not.toContain('.claude/specs/')
+    expect(workflow?.content).not.toContain('docs/research/')
+  })
+
+  it('plain workflow.md does not reference .claude/specs/ paths', () => {
+    const cfg: DevConfig = { ...tsFrontendConfig, workflow: 'none' }
+    const rules = generateRules(cfg, TEMPLATES_DIR)
+    const workflow = rules.find((r) => r.filename === 'workflow.md')
+    expect(workflow?.content).not.toContain('.claude/specs/YYYY-MM-DD')
+  })
+
   it('emits GSD workflow when workflow is gsd', () => {
     const rules = generateRules(rustConfig, TEMPLATES_DIR)
     const workflow = rules.find((r) => r.filename === 'workflow.md')
@@ -567,6 +605,23 @@ describe('installAll update mode', () => {
     }
     return dir
   }
+
+  it('does not create .claude/specs/ directory or TEMPLATE.md', async () => {
+    const dir = makeTmpProject({
+      'package.json': JSON.stringify({ name: 'test', scripts: {} }),
+    })
+    try {
+      writeConfig(dir, tsFrontendConfig)
+      await installAll(dir, tsFrontendConfig, {} as never, {
+        skipSideEffects: true,
+      })
+      const { existsSync } = await import('node:fs')
+      expect(existsSync(join(dir, '.claude/specs'))).toBe(false)
+      expect(existsSync(join(dir, '.claude/specs/TEMPLATE.md'))).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true })
+    }
+  })
 
   it('does not overwrite lefthook.yml when isUpdate is true', async () => {
     const dir = makeTmpProject({

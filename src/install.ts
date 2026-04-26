@@ -162,11 +162,9 @@ export async function installAll(
     }
   }
 
-  // Specs directory
-  const specsDir = join(cwd, '.claude', 'specs')
-  mkdirSync(specsDir, { recursive: true })
-  writeFileSync(join(specsDir, 'TEMPLATE.md'), specTemplate())
-  log('.claude/specs/TEMPLATE.md')
+  // bd is the source of truth for specs/plans/research/decisions.
+  // No `.claude/specs/`, `.claude/plans/`, or `docs/research/` directories
+  // are created — the bd database holds all of that.
 
   // ─── Side-effect installs ───────────────────────────────────────────
 
@@ -201,6 +199,15 @@ export async function installAll(
       case 'failed':
         warn(`beads: bd init failed (${cliResult.error})`)
         break
+    }
+
+    if (cliResult.status === 'created' || cliResult.status === 'exists') {
+      const configureResult = configureBeadsAfterInit(cwd)
+      if (configureResult.ok) {
+        log('beads: validation.on-create=warn, hooks installed')
+      } else {
+        warn(`beads: post-init configuration failed (${configureResult.error})`)
+      }
     }
 
     const pluginResult = installBeadsPlugin(cwd)
@@ -616,6 +623,29 @@ export function installBeadsCli(cwd: string): BeadsCliResult {
   return { status: 'failed', error: runFailureMessage(r) }
 }
 
+export type BeadsConfigureResult = { ok: true } | { ok: false; error: string }
+
+export function configureBeadsAfterInit(cwd: string): BeadsConfigureResult {
+  if (!commandExists('bd')) return { ok: false, error: 'bd not in PATH' }
+  if (!existsSync(join(cwd, '.beads'))) return { ok: false, error: '.beads/ does not exist' }
+
+  const validation = runCommand('bd', ['config', 'set', 'validation.on-create', 'warn'], {
+    cwd,
+    timeoutMs: 10_000,
+  })
+  if (!validation.ok) return { ok: false, error: runFailureMessage(validation) }
+
+  const hooks = runCommand('bd', ['hooks', 'install'], {
+    cwd,
+    timeoutMs: 30_000,
+  })
+  if (!hooks.ok && hooks.reason !== 'exit') {
+    return { ok: false, error: runFailureMessage(hooks) }
+  }
+
+  return { ok: true }
+}
+
 /**
  * Result of attempting to install the beads Claude Code plugin.
  */
@@ -902,29 +932,3 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function specTemplate(): string {
-  return `# Spec: <Title>
-
-## Overview
-<Problem being solved, target users, context>
-
-## Success Criteria
-- [ ] <Test case 1: expected behavior>
-- [ ] <Test case 2: edge case>
-- [ ] <Test case 3: error case>
-
-## Implementation Plan
-### Step 1: <Module/File>
-- [ ] <Change A>
-- [ ] <Change B>
-
-### Step 2: <Module/File>
-- [ ] <Change A>
-
-## Constraints & Non-Goals
-<What's out of scope, why>
-
-## Rollback Plan
-<How to revert if something breaks>
-`
-}

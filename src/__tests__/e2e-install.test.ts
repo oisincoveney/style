@@ -4,12 +4,13 @@
  * If it isn't installed, this suite fails fast — we do not silently skip.
  */
 
+import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DevConfig } from '../config.js'
-import { installAll, installBeadsCli } from '../install.js'
+import { configureBeadsAfterInit, installAll, installBeadsCli } from '../install.js'
 import type { Answers } from '../prompts.js'
 
 const answers: Answers = {
@@ -87,6 +88,43 @@ describe('end-to-end install with real side effects', () => {
       installBeadsCli(dir)
       const second = installBeadsCli(dir)
       expect(second).toEqual({ status: 'exists' })
+    },
+    BD_INIT_TIMEOUT_MS,
+  )
+
+  it(
+    'configureBeadsAfterInit sets validation.on-create to warn',
+    () => {
+      installBeadsCli(dir)
+      const result = configureBeadsAfterInit(dir)
+      expect(result.ok).toBe(true)
+      const cfg = spawnSync('bd', ['config', 'get', 'validation.on-create'], {
+        cwd: dir,
+        encoding: 'utf8',
+      })
+      expect(cfg.status).toBe(0)
+      expect(cfg.stdout).toContain('warn')
+    },
+    BD_INIT_TIMEOUT_MS,
+  )
+
+  it(
+    'configureBeadsAfterInit returns ok=false when .beads/ is missing',
+    () => {
+      const result = configureBeadsAfterInit(dir)
+      expect(result.ok).toBe(false)
+    },
+    BD_INIT_TIMEOUT_MS,
+  )
+
+  it(
+    'configureBeadsAfterInit is idempotent (safe to re-run on update)',
+    () => {
+      installBeadsCli(dir)
+      const first = configureBeadsAfterInit(dir)
+      const second = configureBeadsAfterInit(dir)
+      expect(first.ok).toBe(true)
+      expect(second.ok).toBe(true)
     },
     BD_INIT_TIMEOUT_MS,
   )

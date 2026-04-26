@@ -94,7 +94,43 @@ description: Workflow methodology for this project
 `
   if (config.workflow === 'idd') return header + iddBody()
   if (config.workflow === 'gsd') return header + gsdBody()
+  if ((config.workflow as string) === 'bd') return header + bdBody()
   return header + plainSpecBody()
+}
+
+function bdBody(): string {
+  return `# Workflow: bd is the source of truth
+
+All specs, plans, research, decisions, and acceptance criteria live in bd.
+Never write standalone markdown files for these — no on-disk
+spec / plan / research / ADR directories.
+
+## The loop (one ticket per session)
+
+1. \`/epic <slug>\` — drafts an EARS-format epic body and creates the bd
+   epic + child tickets via \`bd create\`.
+2. \`/work-next\` — \`bd ready --json\` picks the highest-priority unblocked
+   issue, runs \`bd update <id> --claim\`, and echoes the acceptance criteria.
+3. **TDD** — write failing test → make it pass → refactor. Enforced by
+   \`tdd-guard.sh\` at the lefthook layer.
+4. \`/verify-spec <id>\` — fresh-context subagent re-reads the bd issue,
+   runs each Verification Command, returns PASS/FAIL/PARTIAL.
+5. \`bd close <id> --reason "<why>" --suggest-next\` — only after PASS.
+6. **Discoveries** — \`/discover <description>\` creates a child issue
+   with \`--deps=discovered-from:<current>\`. Never expand scope silently.
+
+## Other artifacts
+
+- **Plans** — \`/plan <id>\` writes to the issue's \`--design\` field.
+- **Research** — \`/research <topic>\` either \`bd remember\` (cross-session
+  knowledge) or \`bd create --type=spike\` (issue-bound research).
+- **Decisions / ADRs** — \`/decision <topic>\` runs \`bd decision record\`.
+- **Hygiene** — \`/bd-hygiene\` runs \`bd doctor\`, \`bd stale\`, \`bd lint\`,
+  \`bd count --status open\` (Yegge: keep ≤200 open).
+
+Reference issues in commits: \`Implements bd-XXXX\`. No spec paths in commit
+messages — the bd ID resolves.
+`
 }
 
 function iddBody(): string {
@@ -137,11 +173,13 @@ function gsdBody(): string {
 }
 
 function plainSpecBody(): string {
-  return `# Workflow: Lightweight Specs
+  return `# Workflow: Lightweight
 
-For any task larger than a single-file change, create a spec in \`.claude/specs/YYYY-MM-DD-<slug>.md\` using the template. The spec must have explicit success criteria before implementation begins.
+For any task larger than a single-file change, write down explicit success
+criteria before implementation begins. Reference the criteria in commits.
 
-Reference the spec in commits: "Implements per specs/YYYY-MM-DD-<slug>.md".
+If beads is enabled, switch \`workflow\` to \`bd\` in \`.dev.config.json\` to
+get the full bd-native loop.
 `
 }
 

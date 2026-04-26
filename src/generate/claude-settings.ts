@@ -68,6 +68,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
 
   const baselinePin = config.enforcement?.baselinePin === true
   const multiEvent = config.enforcement?.multiEvent === true
+  const requireClaim = config.beadsWorkflow?.requireClaim === true
 
   const sessionStartHooks: HookCommand[] = [hook('context-bootstrap.sh', 10)]
   if (baselinePin) {
@@ -95,6 +96,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
         {
           matcher: 'Write|Edit',
           hooks: [
+            ...(requireClaim ? [hook('require-claim.sh', 5)] : []),
             ...(config.language === 'typescript'
               ? [hook('ts-style-guard.sh', 30), hook('import-validator.sh', 10)]
               : []),
