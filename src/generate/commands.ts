@@ -21,15 +21,10 @@ export function generateCommands(config: DevConfig): CommandFile[] {
     files.push({ filename: 'work-next.md', content: workNextCommand() })
     files.push({ filename: 'bd-hygiene.md', content: bdHygieneCommand() })
     files.push({ filename: 'discover.md', content: discoverCommand() })
-    files.push({ filename: 'plan.md', content: bdPlanCommand() })
-    files.push({ filename: 'research.md', content: bdResearchCommand() })
-    files.push({ filename: 'decision.md', content: bdDecisionCommand() })
-    files.push({ filename: 'verify-spec.md', content: verifySpecCommand() })
-  }
-  if (!config.tools.includes('beads')) {
-    files.push({ filename: 'spec.md', content: specCommand() })
     files.push({ filename: 'plan.md', content: planCommand() })
     files.push({ filename: 'research.md', content: researchCommand() })
+    files.push({ filename: 'decision.md', content: decisionCommand() })
+    files.push({ filename: 'verify-spec.md', content: verifySpecCommand() })
   }
   files.push({ filename: 'commit.md', content: commitCommand() })
   files.push({ filename: 'explore.md', content: exploreCommand() })
@@ -125,7 +120,7 @@ Do NOT expand scope of the current ticket without filing this discovery first. T
 `
 }
 
-function bdPlanCommand(): string {
+function planCommand(): string {
   return `---
 description: Write a plan into a bd issue's design field (no markdown files on disk)
 disable-model-invocation: true
@@ -160,7 +155,7 @@ Do NOT create \`.claude/plans/\` or any markdown file in the working tree. The p
 `
 }
 
-function bdResearchCommand(): string {
+function researchCommand(): string {
   return `---
 description: Research a topic and store the dossier in bd (memory or spike), never on disk
 disable-model-invocation: true
@@ -194,7 +189,7 @@ Do NOT create \`docs/research/\` or any markdown file. All research lives in bd.
 `
 }
 
-function bdDecisionCommand(): string {
+function decisionCommand(): string {
   return `---
 description: Record an architecture/process decision in bd as the source of truth
 disable-model-invocation: true
@@ -377,19 +372,6 @@ Run \`bd ready\` to list available work, then \`bd show\` on the highest-priorit
 `
 }
 
-function specCommand(): string {
-  return `---
-description: Create a new spec file in .claude/specs/ for the current task
-disable-model-invocation: true
-allowed-tools: Bash(date *) Write Read
----
-
-Create a new spec at \`.claude/specs/YYYY-MM-DD-$ARGUMENTS.md\` using the TEMPLATE.md in the same directory. Use today's date (from \`date +%Y-%m-%d\`) and the slug passed as \`$ARGUMENTS\`. Fill in the Overview and Success Criteria sections with your best inference from recent conversation, then stop — the user fills in the rest.
-
-If \`$ARGUMENTS\` is empty, ask for a slug (kebab-case) and halt.
-`
-}
-
 function commitCommand(): string {
   return `---
 description: Split current working changes into logical, focused commits
@@ -418,31 +400,6 @@ If the diff is trivially one concern, one commit is fine — do not invent split
 `
 }
 
-function researchCommand(): string {
-  return `---
-description: Produce a cited research dossier BEFORE any implementation
-disable-model-invocation: true
-allowed-tools: WebFetch WebSearch Read Grep Glob Bash
----
-
-Produce a research dossier at \`docs/research/YYYY-MM-DD-$ARGUMENTS.md\` (create the directory if missing). No Edit/Write to source code until the user approves the dossier.
-
-The dossier MUST contain:
-
-1. **Problem statement** — what the user asked, restated in one paragraph.
-2. **Current state** — what exists in this repo relevant to the problem, with \`file:line\` references from actual Read/Grep calls this session. No "I believe" or "typically".
-3. **External facts** — every API, library, service, or protocol claim links to a primary source fetched via WebFetch in this session. Quote the specific passage that supports each claim.
-4. **Environment assumptions** — what you had to ask or check about the user's setup (DNS, auth, deployment targets, package manager, versions). Flag anything unverified.
-5. **Options** — at least two concrete approaches, with tradeoffs, and which project conventions each respects/violates (check \`.dev.config.json\`, \`AGENTS.md\`, \`CLAUDE.md\`).
-6. **Recommendation** — one option, with explicit risks and unknowns.
-7. **Open questions** — anything you could not verify. Do not answer these from training data.
-
-If \`$ARGUMENTS\` is empty, ask for a slug (kebab-case) and halt.
-
-Stop after writing the dossier. Wait for user approval before implementing.
-`
-}
-
 function exploreCommand(): string {
   return `---
 description: Explore and map the code path for a feature or bug — read-only, no edits
@@ -465,27 +422,3 @@ Do not edit any files during exploration. If the user tells you to start editing
 `
 }
 
-function planCommand(): string {
-  return `---
-description: Produce a written plan for a multi-file or architectural change; no edits
-disable-model-invocation: true
-allowed-tools: Read Grep Glob Bash(rg *) Write
----
-
-Write a plan at \`.claude/plans/YYYY-MM-DD-$ARGUMENTS.md\` (create the directory if missing) for the task \`$ARGUMENTS\`. No source-code Edit/Write until the user approves the plan.
-
-The plan MUST contain:
-
-1. **Goal** — one sentence: what the user wants, stated as an outcome.
-2. **Root cause / requirement** — why this change, not symptoms.
-3. **Files to change** — every file, with a one-line reason per file. If you don't know the file exists, read the tree first.
-4. **Order of operations** — which edit happens first, and why that order (e.g., contract before callers, tests before implementation if TDD).
-5. **What you verified** — docs read (with URLs), code traced (with \`file:line\`), commands run.
-6. **Risks** — what could go wrong, what you'll do to mitigate.
-7. **Out of scope** — what this plan will NOT touch, to prevent scope creep.
-
-If \`$ARGUMENTS\` is empty, ask for a slug (kebab-case) and halt.
-
-After writing, print the plan path and stop. Wait for user approval before any code edit.
-`
-}

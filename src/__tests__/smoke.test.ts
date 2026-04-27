@@ -720,13 +720,13 @@ describe('generateCommands — bd-native /epic', () => {
     expect(cmds.some((c) => c.filename === 'work-next.md')).toBe(false)
   })
 
-  it('keeps legacy /spec /plan /research when beads is not in tools', async () => {
+  it('omits /spec /plan /research entirely when beads is not in tools', async () => {
     const { generateCommands } = await import('../generate/commands.js')
     const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
     const cmds = generateCommands(cfg)
-    expect(cmds.some((c) => c.filename === 'spec.md')).toBe(true)
-    expect(cmds.some((c) => c.filename === 'plan.md')).toBe(true)
-    expect(cmds.some((c) => c.filename === 'research.md')).toBe(true)
+    expect(cmds.some((c) => c.filename === 'spec.md')).toBe(false)
+    expect(cmds.some((c) => c.filename === 'plan.md')).toBe(false)
+    expect(cmds.some((c) => c.filename === 'research.md')).toBe(false)
   })
 })
 
