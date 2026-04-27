@@ -498,6 +498,7 @@ some content
     expect(second.removed).toEqual([])
     expect(second.trimmed).toEqual([])
     expect(second.configFieldsStripped).toEqual([])
+    expect(second.constitutionSeeded).toBe(0)
     expect(second.warnings).toEqual([])
   })
 
@@ -506,6 +507,7 @@ some content
     expect(r.removed).toEqual([])
     expect(r.trimmed).toEqual([])
     expect(r.configFieldsStripped).toEqual([])
+    expect(r.constitutionSeeded).toBe(0)
     expect(r.warnings).toEqual([])
   })
 })

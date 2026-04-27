@@ -775,6 +775,7 @@ export interface MigrationResult {
   removed: string[]
   trimmed: string[]
   configFieldsStripped: string[]
+  constitutionSeeded: number
   warnings: string[]
 }
 
@@ -783,6 +784,7 @@ export function applyDeleteriousMigrations(cwd: string): MigrationResult {
     removed: [],
     trimmed: [],
     configFieldsStripped: [],
+    constitutionSeeded: 0,
     warnings: [],
   }
 
@@ -820,19 +822,36 @@ export function applyDeleteriousMigrations(cwd: string): MigrationResult {
   }
 
   const configPath = join(cwd, '.dev.config.json')
+  let parsedConfig: Record<string, unknown> | null = null
   if (existsSync(configPath)) {
     const raw = readFileSync(configPath, 'utf8')
-    const parsed = JSON.parse(raw) as Record<string, unknown>
+    parsedConfig = JSON.parse(raw) as Record<string, unknown>
     let changed = false
     for (const field of REMOVED_CONFIG_FIELDS) {
-      if (field in parsed) {
-        delete parsed[field]
+      if (field in parsedConfig) {
+        delete parsedConfig[field]
         result.configFieldsStripped.push(field)
         changed = true
       }
     }
     if (changed) {
-      writeFileSync(configPath, `${JSON.stringify(parsed, null, 2)}\n`)
+      writeFileSync(configPath, `${JSON.stringify(parsedConfig, null, 2)}\n`)
+    }
+  }
+
+  if (
+    parsedConfig &&
+    Array.isArray(parsedConfig.tools) &&
+    (parsedConfig.tools as unknown[]).includes('beads') &&
+    parsedConfig.workflow === 'bd' &&
+    existsSync(join(cwd, '.beads')) &&
+    commandExists('bd')
+  ) {
+    const seedResult = seedConstitutionDecisions(cwd, parsedConfig as unknown as DevConfig)
+    if (seedResult.ok) {
+      result.constitutionSeeded = seedResult.created
+    } else {
+      result.warnings.push(`constitution seeding skipped: ${seedResult.error}`)
     }
   }
 

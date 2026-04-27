@@ -54,6 +54,9 @@ export async function runUpdate(): Promise<void> {
   for (const field of migration.configFieldsStripped) {
     p.log.info(`stripped removed config field: ${field}`)
   }
+  if (migration.constitutionSeeded > 0) {
+    p.log.info(`seeded ${migration.constitutionSeeded} constitution decision(s)`)
+  }
   for (const warning of migration.warnings) p.log.warn(warning)
 
   const spinner = p.spinner()
