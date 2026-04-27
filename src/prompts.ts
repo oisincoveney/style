@@ -181,15 +181,8 @@ export async function runPrompts(detected: Detected): Promise<Answers> {
     await p.select<WorkflowFramework>({
       message: 'Workflow framework?',
       options: [
-        {
-          value: 'idd',
-          label: 'IDD — Intent-Driven Development (lighter, spec-first)',
-        },
-        {
-          value: 'gsd',
-          label: 'GSD — Get Shit Done (structured 6-phase workflow)',
-        },
-        { value: 'none', label: 'Neither — just lightweight .claude/specs/' },
+        { value: 'bd', label: 'bd-native — beads is the source of truth (recommended when beads is selected)' },
+        { value: 'none', label: 'None — lightweight, no opinionated workflow' },
       ],
     }),
   )

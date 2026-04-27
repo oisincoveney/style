@@ -14,6 +14,7 @@ import {
   configureBeadsAfterInit,
   installAll,
   installBeadsCli,
+  seedConstitutionDecisions,
   trimBeadsIntegrationBlock,
 } from '../install.js'
 import type { Answers } from '../prompts.js'
@@ -172,6 +173,56 @@ some content
     trimBeadsIntegrationBlock(path)
     expect(readFileSync(path, 'utf8')).toBe(original)
   })
+
+  it(
+    'seedConstitutionDecisions creates pinned decisions and flips validation to error',
+    () => {
+      installBeadsCli(dir)
+      const result = seedConstitutionDecisions(dir, {
+        ...config,
+        commands: { ...config.commands, test: 'cargo test' },
+      })
+      expect(result.ok).toBe(true)
+      if (!result.ok) return
+      expect(result.created).toBeGreaterThan(0)
+
+      const list = spawnSync(
+        'bd',
+        ['list', '--type=decision', '--status', 'all', '--json'],
+        { cwd: dir, encoding: 'utf8' },
+      )
+      expect(list.status).toBe(0)
+      const decisions = JSON.parse(list.stdout) as Array<{ title: string; status: string }>
+      expect(decisions.length).toBe(result.created)
+      expect(decisions.every((d) => d.status === 'pinned')).toBe(true)
+      expect(
+        decisions.some((d) => d.title.includes('package manager is cargo')),
+      ).toBe(true)
+      expect(decisions.some((d) => d.title.includes('test command is cargo test'))).toBe(true)
+
+      const cfg = spawnSync('bd', ['config', 'get', 'validation.on-create'], {
+        cwd: dir,
+        encoding: 'utf8',
+      })
+      expect(cfg.stdout).toContain('error')
+    },
+    BD_INIT_TIMEOUT_MS,
+  )
+
+  it(
+    'seedConstitutionDecisions is idempotent (no duplicates on re-run)',
+    () => {
+      installBeadsCli(dir)
+      const first = seedConstitutionDecisions(dir, config)
+      const second = seedConstitutionDecisions(dir, config)
+      expect(first.ok).toBe(true)
+      expect(second.ok).toBe(true)
+      if (!first.ok || !second.ok) return
+      expect(first.created).toBeGreaterThan(0)
+      expect(second.created).toBe(0)
+    },
+    BD_INIT_TIMEOUT_MS,
+  )
 
   it('trimBeadsIntegrationBlock is a no-op when Session Completion is already absent', () => {
     const path = join(dir, 'AGENTS.md')

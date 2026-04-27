@@ -68,6 +68,9 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
 
   const baselinePin = config.enforcement?.baselinePin === true
   const multiEvent = config.enforcement?.multiEvent === true
+  const docsFirst = config.enforcement?.docsFirst === true
+  const citationCheck = config.enforcement?.citationCheck === true
+  const auditLog = config.enforcement?.auditLog === true
   const requireClaim = config.beadsWorkflow?.requireClaim === true
 
   const sessionStartHooks: HookCommand[] = [hook('context-bootstrap.sh', 10)]
@@ -78,6 +81,9 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
   const stopHooks: HookCommand[] = [hook('pre-stop-verification.sh', 30)]
   if (baselinePin) {
     stopHooks.push(hook('baseline-compare.sh', 120))
+  }
+  if (citationCheck) {
+    stopHooks.push(hook('citation-check.sh', 10))
   }
   if (multiEvent) {
     stopHooks.push(hook('ai-antipattern-guard.sh', 10))
@@ -93,6 +99,21 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
         },
       ],
       PreToolUse: [
+        ...(auditLog
+          ? [
+              {
+                hooks: [hook('audit-log.sh', 5)],
+              },
+            ]
+          : []),
+        ...(docsFirst
+          ? [
+              {
+                matcher: 'Read|Glob',
+                hooks: [hook('docs-first.sh', 5)],
+              },
+            ]
+          : []),
         {
           matcher: 'Write|Edit',
           hooks: [
@@ -183,6 +204,16 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
         },
       ],
     },
+  }
+
+  if (config.mcp?.context7 === true) {
+    settings.mcpServers = {
+      ...(settings.mcpServers ?? {}),
+      context7: {
+        command: 'npx',
+        args: ['-y', '@upstash/context7-mcp@latest'],
+      },
+    }
   }
 
   return settings

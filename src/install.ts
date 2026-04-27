@@ -166,6 +166,10 @@ export async function installAll(
   // No `.claude/specs/`, `.claude/plans/`, or `docs/research/` directories
   // are created — the bd database holds all of that.
 
+  if (config.enforcement?.auditLog === true) {
+    appendToGitignore(cwd, '.claude/audit.jsonl')
+  }
+
   // ─── Side-effect installs ───────────────────────────────────────────
 
   // Strip scope-guard unconditionally — it false-positives on read commands
@@ -208,6 +212,19 @@ export async function installAll(
       } else {
         warn(`beads: post-init configuration failed (${configureResult.error})`)
       }
+
+      if (config.workflow === 'bd') {
+        const seedResult = seedConstitutionDecisions(cwd, config)
+        if (seedResult.ok) {
+          if (seedResult.created > 0) {
+            log(`beads: seeded ${seedResult.created} constitution decision(s)`)
+          } else {
+            log('beads: constitution already seeded')
+          }
+        } else {
+          warn(`beads: constitution seeding failed (${seedResult.error})`)
+        }
+      }
     }
 
     const pluginResult = installBeadsPlugin(cwd)
@@ -231,11 +248,9 @@ export async function installAll(
     installMcpServers(cwd, answers.mcpServers, log, warn)
   }
 
-  if (config.workflow === 'gsd') {
-    installGsd(cwd, log, warn)
-  } else if (config.workflow === 'idd') {
-    installIdd(cwd, log, warn)
-  }
+  // GSD and IDD workflows have been removed. The bd-native workflow is the
+  // only supported flavor; readConfig coerces legacy "gsd" / "idd" values to
+  // "none" with a deprecation warning.
 }
 
 function installClaudeHooks(cwd: string, log: (msg: string) => void): void {
@@ -653,6 +668,113 @@ export function configureBeadsAfterInit(cwd: string): BeadsConfigureResult {
   return { ok: true }
 }
 
+export type SeedConstitutionResult =
+  | { ok: true; created: number }
+  | { ok: false; error: string }
+
+export function seedConstitutionDecisions(
+  cwd: string,
+  config: DevConfig,
+): SeedConstitutionResult {
+  if (!commandExists('bd')) return { ok: false, error: 'bd not in PATH' }
+  if (!existsSync(join(cwd, '.beads'))) return { ok: false, error: '.beads/ does not exist' }
+
+  const list = spawnSync('bd', ['list', '--type=decision', '--status', 'all', '--json'], {
+    cwd,
+    encoding: 'utf8',
+    timeout: 10_000,
+  })
+
+  const existingTitles = new Set<string>()
+  if (list.status === 0 && list.stdout) {
+    try {
+      const issues = JSON.parse(list.stdout) as Array<{ title?: string }>
+      for (const issue of issues) {
+        if (issue.title) existingTitles.add(issue.title)
+      }
+    } catch {
+      // Fall through; treat as no existing decisions.
+    }
+  }
+
+  const decisions: Array<{ title: string; body: string }> = [
+    {
+      title: `Constitution: package manager is ${config.packageManager}`,
+      body: `## Decision\nUse \`${config.packageManager}\` for all dependency management commands.\n\n## Rationale\nDocumented in .dev.config.json. Hooks normalize alternative invocations.\n\n## Alternatives Considered\nnpm, pnpm, yarn — rejected per project choice.`,
+    },
+    {
+      title: `Constitution: test command is ${config.commands.test ?? 'unset'}`,
+      body: `## Decision\nThe canonical test command is \`${config.commands.test ?? 'unset'}\`. Pre-stop verification matches against this string.\n\n## Rationale\nExplicit single-source command keeps proof-of-work checks deterministic.\n\n## Alternatives Considered\nMultiple test runners — rejected to keep the verification gate simple.`,
+    },
+    {
+      title: 'Constitution: destructive ops require explicit user approval',
+      body: '## Decision\nNever run destructive commands without explicit user approval. The destructive-command-guard hook enforces this; salvageable cases are rewritten rather than denied.\n\n## Rationale\nIrreversible actions need a human in the loop.\n\n## Alternatives Considered\nFully autonomous — rejected; blast radius of mistakes is too high.',
+    },
+    {
+      title: 'Constitution: no follow-up questions in agent output',
+      body: '## Decision\nAgent responses must not end with follow-up prompts. The banned-words guard enforces this on Stop.\n\n## Rationale\nFollow-up questions force the user to opt out of unsolicited work; net negative on flow.\n\n## Alternatives Considered\nGuide via prompt only — rejected; agents drift.',
+    },
+    {
+      title: 'Constitution: no completion claims without proof',
+      body: '## Decision\nNever claim completion without having executed the configured test command this session. Pre-stop-verification hook enforces this.\n\n## Rationale\nUnverified claims are the most expensive failure mode.\n\n## Alternatives Considered\nAdvisory rule only — rejected; agents skip the run.',
+    },
+  ]
+
+  let created = 0
+  for (const decision of decisions) {
+    if (existingTitles.has(decision.title)) continue
+    const create = spawnSync(
+      'bd',
+      [
+        'create',
+        '--type=decision',
+        '--priority=0',
+        `--title=${decision.title}`,
+        '--silent',
+        '--body-file=-',
+      ],
+      {
+        cwd,
+        encoding: 'utf8',
+        timeout: 10_000,
+        input: decision.body,
+      },
+    )
+    if (create.status !== 0) {
+      return {
+        ok: false,
+        error: `Failed to create decision: ${create.stderr ?? 'unknown error'}`,
+      }
+    }
+    const id = (create.stdout ?? '').trim()
+    if (id) {
+      spawnSync('bd', ['update', id, '--status', 'pinned'], {
+        cwd,
+        timeout: 10_000,
+      })
+    }
+    created += 1
+  }
+
+  if (created > 0) {
+    spawnSync('bd', ['config', 'set', 'validation.on-create', 'error'], {
+      cwd,
+      timeout: 10_000,
+    })
+  }
+
+  return { ok: true, created }
+}
+
+function appendToGitignore(cwd: string, line: string): void {
+  const path = join(cwd, '.gitignore')
+  const existing = existsSync(path) ? readFileSync(path, 'utf8') : ''
+  const lines = existing.split(/\r?\n/)
+  if (lines.some((l) => l.trim() === line)) return
+  const updated = (existing.endsWith('\n') || existing === '' ? existing : `${existing}\n`) + `${line}\n`
+  writeFileSync(path, updated)
+}
+
 export function trimBeadsIntegrationBlock(path: string): void {
   const raw = readFileSync(path, 'utf8')
   const begin = raw.indexOf('<!-- BEGIN BEADS INTEGRATION')
@@ -746,59 +868,6 @@ function installMcpServers(
         warn(`MCP: ${name} failed (${msg})`)
       }
     }
-  }
-}
-
-function installGsd(
-  cwd: string,
-  log: (msg: string) => void,
-  warn: (msg: string) => void,
-): void {
-  // GSD is installed as a Claude Code plugin from the marketplace.
-  if (!commandExists('claude')) {
-    warn('GSD: `claude` CLI not in PATH. Install GSD manually from https://gsd.build')
-    return
-  }
-  try {
-    execSync('claude plugin marketplace add --scope project gsd-build/get-shit-done', {
-      cwd,
-      stdio: 'pipe',
-    })
-    execSync('claude plugin install --scope project get-shit-done', { cwd, stdio: 'pipe' })
-    log('GSD plugin installed')
-  } catch (err) {
-    const msg = (err as Error).message
-    if (msg.includes('already')) {
-      log('GSD plugin already installed')
-    } else {
-      warn(`GSD install failed (${msg}). Install manually: https://gsd.build`)
-    }
-  }
-}
-
-function installIdd(
-  cwd: string,
-  log: (msg: string) => void,
-  warn: (msg: string) => void,
-): void {
-  // IDD Complete Toolkit is a set of skills + templates cloned from GitHub.
-  const iddDir = join(cwd, '.claude', 'idd')
-  if (existsSync(iddDir)) {
-    log('IDD: .claude/idd already exists, skipping')
-    return
-  }
-  if (!commandExists('git')) {
-    warn('IDD: `git` not in PATH, skipping IDD toolkit install')
-    return
-  }
-  try {
-    execSync(`git clone --depth 1 https://github.com/ArcBlock/idd.git ${iddDir}`, {
-      cwd,
-      stdio: 'pipe',
-    })
-    log('IDD: toolkit cloned to .claude/idd/')
-  } catch (err) {
-    warn(`IDD clone failed (${(err as Error).message}). Manual install: https://intent-driven.dev`)
   }
 }
 

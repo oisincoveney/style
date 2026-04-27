@@ -113,4 +113,43 @@ describe('config schema — enforcement / beadsWorkflow / mcp fields (A1)', () =
     expect(loaded?.enforcement?.baselinePin).toBe(true)
     expect(loaded?.enforcement?.docsFirst).toBeUndefined()
   })
+
+  it('coerces legacy workflow="idd" to "none" with a deprecation warning', () => {
+    const path = `${dir}/.dev.config.json`
+    const raw = JSON.stringify({ ...baseConfig, workflow: 'idd' }, null, 2)
+    require('node:fs').writeFileSync(path, raw)
+    const warnings: string[] = []
+    const orig = console.warn
+    console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '))
+    try {
+      const loaded = readConfig(dir)
+      expect(loaded?.workflow).toBe('none')
+      expect(warnings.some((w) => w.includes('Deprecation') && w.includes('idd'))).toBe(true)
+    } finally {
+      console.warn = orig
+    }
+  })
+
+  it('coerces legacy workflow="gsd" to "none" with a deprecation warning', () => {
+    const path = `${dir}/.dev.config.json`
+    const raw = JSON.stringify({ ...baseConfig, workflow: 'gsd' }, null, 2)
+    require('node:fs').writeFileSync(path, raw)
+    const warnings: string[] = []
+    const orig = console.warn
+    console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '))
+    try {
+      const loaded = readConfig(dir)
+      expect(loaded?.workflow).toBe('none')
+      expect(warnings.some((w) => w.includes('Deprecation') && w.includes('gsd'))).toBe(true)
+    } finally {
+      console.warn = orig
+    }
+  })
+
+  it('passes "bd" workflow through unchanged', () => {
+    const cfg: DevConfig = { ...baseConfig, workflow: 'bd' }
+    writeConfig(dir, cfg)
+    const loaded = readConfig(dir)
+    expect(loaded?.workflow).toBe('bd')
+  })
 })

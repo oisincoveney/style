@@ -8,7 +8,7 @@ import { join } from 'node:path'
 import type { ProjectVariant } from './skills.js'
 
 export type Language = 'typescript' | 'rust' | 'go' | 'swift' | 'other'
-export type WorkflowFramework = 'gsd' | 'idd' | 'none'
+export type WorkflowFramework = 'bd' | 'none'
 export type PackageManager = 'bun' | 'pnpm' | 'yarn' | 'npm' | 'cargo' | 'go' | 'swift' | 'other'
 export type Target = 'claude' | 'codex' | 'opencode' | 'cursor' | 'lefthook'
 export type IssueTemplateFormat = 'ears' | 'gherkin' | 'checklist'
@@ -19,6 +19,7 @@ export interface EnforcementConfig {
   symbolCheck?: boolean
   auditLog?: boolean
   multiEvent?: boolean
+  citationCheck?: boolean
 }
 
 export interface BeadsWorkflowConfig {
@@ -74,7 +75,15 @@ export function readConfig(cwd: string): DevConfig | null {
     return null
   }
   const raw = readFileSync(path, 'utf8')
-  return JSON.parse(raw) as DevConfig
+  const parsed = JSON.parse(raw) as Omit<DevConfig, 'workflow'> & { workflow?: string }
+  if (parsed.workflow === 'gsd' || parsed.workflow === 'idd') {
+    // biome-ignore lint: CLI deprecation notice
+    console.warn(
+      `Deprecation: workflow="${parsed.workflow}" is no longer supported. Coercing to "none". Set workflow="bd" in .dev.config.json for the bd-native workflow.`,
+    )
+    parsed.workflow = 'none'
+  }
+  return parsed as DevConfig
 }
 
 export function writeConfig(cwd: string, config: DevConfig): void {

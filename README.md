@@ -63,7 +63,7 @@ Interactive setup for an existing project. Run inside a directory with `package.
 
 7. **Tools** — Beads (issue tracker), contract-driven modules
 
-8. **Workflow** — IDD (Intent-Driven Development), GSD (Get Shit Done), or lightweight spec-driven flow
+8. **Workflow** — `bd` (beads-as-source-of-truth: epic → ticket → /work-next → /verify-spec) or `none`
 
 9. **AI targets** — Which tools to generate config for: Claude Code, Codex, OpenCode, Cursor, lefthook
 
@@ -161,7 +161,7 @@ All settings are stored in `.dev.config.json` at the project root:
   },
   "skills": ["code-quality", "architecture", "testing", "ai-behavior", "debug", "code-review"],
   "tools": ["beads"],
-  "workflow": "gsd",
+  "workflow": "bd",
   "contractDriven": false,
   "targets": ["claude", "lefthook"],
   "models": {

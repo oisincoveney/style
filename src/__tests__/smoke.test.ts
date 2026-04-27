@@ -33,7 +33,7 @@ const tsFrontendConfig: DevConfig = {
   },
   skills: RULE_SKILLS.map((s) => s.id),
   tools: ['beads', 'contract-driven'],
-  workflow: 'idd',
+  workflow: 'bd',
   contractDriven: true,
   targets: ['claude', 'codex', 'cursor', 'lefthook'],
 }
@@ -53,7 +53,7 @@ const rustConfig: DevConfig = {
   },
   skills: ['code-quality', 'architecture', 'testing', 'ai-behavior', 'performance'],
   tools: ['beads'],
-  workflow: 'gsd',
+  workflow: 'none',
   contractDriven: false,
   targets: ['claude', 'lefthook'],
 }
@@ -171,6 +171,79 @@ describe('generateClaudeSettings', () => {
       (r) => r.decision === 'allow' && r.tool === 'Bash',
     )
     expect(allowRule?.if).toContain('vp check')
+  })
+
+  describe('audit-log hook (enforcement.auditLog)', () => {
+    it('omits audit-log.sh when auditLog is unset', () => {
+      const settings = generateClaudeSettings(tsFrontendConfig)
+      const pre = JSON.stringify(settings.hooks.PreToolUse ?? [])
+      expect(pre).not.toContain('audit-log.sh')
+    })
+
+    it('registers audit-log.sh on PreToolUse with no matcher when auditLog is true', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { auditLog: true } }
+      const settings = generateClaudeSettings(cfg)
+      const matcherless = (settings.hooks.PreToolUse ?? []).find((e) => e.matcher === undefined)
+      expect(matcherless).toBeDefined()
+      expect(matcherless?.hooks.some((h) => h.command.includes('audit-log.sh'))).toBe(true)
+    })
+  })
+
+  describe('citation-check hook (enforcement.citationCheck)', () => {
+    it('omits citation-check.sh from Stop when citationCheck is unset', () => {
+      const settings = generateClaudeSettings(tsFrontendConfig)
+      const stop = JSON.stringify(settings.hooks.Stop ?? [])
+      expect(stop).not.toContain('citation-check.sh')
+    })
+
+    it('registers citation-check.sh on Stop when citationCheck is true', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { citationCheck: true } }
+      const settings = generateClaudeSettings(cfg)
+      const stop = settings.hooks.Stop ?? []
+      const commands = stop.flatMap((e) => e.hooks.map((h) => h.command))
+      expect(commands.some((c) => c.includes('citation-check.sh'))).toBe(true)
+    })
+  })
+
+  describe('Context7 MCP (mcp.context7)', () => {
+    it('omits context7 mcpServer when mcp.context7 is unset', () => {
+      const settings = generateClaudeSettings(tsFrontendConfig)
+      expect(settings.mcpServers?.context7).toBeUndefined()
+    })
+
+    it('omits context7 mcpServer when mcp.context7 is false', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, mcp: { context7: false } }
+      const settings = generateClaudeSettings(cfg)
+      expect(settings.mcpServers?.context7).toBeUndefined()
+    })
+
+    it('emits context7 mcpServer pointing at @upstash/context7-mcp when enabled', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, mcp: { context7: true } }
+      const settings = generateClaudeSettings(cfg)
+      const c7 = settings.mcpServers?.context7 as { command: string; args: string[] }
+      expect(c7).toBeDefined()
+      expect(c7.command).toBe('npx')
+      expect(c7.args).toContain('-y')
+      expect(c7.args.some((a) => a.includes('@upstash/context7-mcp'))).toBe(true)
+    })
+  })
+
+  describe('docs-first hook (enforcement.docsFirst)', () => {
+    it('omits docs-first.sh when docsFirst is unset', () => {
+      const settings = generateClaudeSettings(tsFrontendConfig)
+      const pre = JSON.stringify(settings.hooks.PreToolUse ?? [])
+      expect(pre).not.toContain('docs-first.sh')
+    })
+
+    it('registers docs-first.sh on PreToolUse Read|Glob when docsFirst is true', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { docsFirst: true } }
+      const settings = generateClaudeSettings(cfg)
+      const readEntry = (settings.hooks.PreToolUse ?? []).find(
+        (e) => e.matcher === 'Read|Glob',
+      )
+      expect(readEntry).toBeDefined()
+      expect(readEntry?.hooks.some((h) => h.command.includes('docs-first.sh'))).toBe(true)
+    })
   })
 
   describe('require-claim hook (beadsWorkflow.requireClaim)', () => {
@@ -546,12 +619,6 @@ describe('generateRules', () => {
     expect(beads?.content).toContain('bd ready')
   })
 
-  it('emits IDD workflow when workflow is idd', () => {
-    const rules = generateRules(tsFrontendConfig, TEMPLATES_DIR)
-    const workflow = rules.find((r) => r.filename === 'workflow.md')
-    expect(workflow?.content).toContain('Intent-Driven Development')
-  })
-
   it('emits bd-native workflow when workflow is bd', () => {
     const cfg: DevConfig = { ...tsFrontendConfig, workflow: 'bd' as never }
     const rules = generateRules(cfg, TEMPLATES_DIR)
@@ -569,12 +636,6 @@ describe('generateRules', () => {
     const rules = generateRules(cfg, TEMPLATES_DIR)
     const workflow = rules.find((r) => r.filename === 'workflow.md')
     expect(workflow?.content).not.toContain('.claude/specs/YYYY-MM-DD')
-  })
-
-  it('emits GSD workflow when workflow is gsd', () => {
-    const rules = generateRules(rustConfig, TEMPLATES_DIR)
-    const workflow = rules.find((r) => r.filename === 'workflow.md')
-    expect(workflow?.content).toContain('Get Shit Done')
   })
 
   it('emits contract-driven.md with language-scoped paths when enabled', () => {

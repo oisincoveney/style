@@ -92,8 +92,6 @@ description: Workflow methodology for this project
 ---
 
 `
-  if (config.workflow === 'idd') return header + iddBody()
-  if (config.workflow === 'gsd') return header + gsdBody()
   if ((config.workflow as string) === 'bd') return header + bdBody()
   return header + plainSpecBody()
 }
@@ -130,45 +128,6 @@ spec / plan / research / ADR directories.
 
 Reference issues in commits: \`Implements bd-XXXX\`. No spec paths in commit
 messages — the bd ID resolves.
-`
-}
-
-function iddBody(): string {
-  return `# Workflow: Intent-Driven Development (IDD)
-
-**Core tagline:** Humans define WHAT and WHY. AI determines HOW and WHEN.
-
-**The workflow:**
-\`\`\`
-Intent → Tests → Code → Sync
-\`\`\`
-
-1. **Intent**: Write a short, high-level intent doc in \`.claude/specs/YYYY-MM-DD-<slug>.md\`. Focus on WHAT and WHY, not implementation detail.
-2. **Tests**: Write tests that verify the intent (behavior, not implementation).
-3. **Code**: Implement the minimum needed to satisfy the tests. Trust the AI to resolve ambiguities.
-4. **Sync**: If code drifts from intent, update the intent first. Intent is source of truth, code is output.
-
-**When to write a spec:** Any task larger than a single-file change.
-`
-}
-
-function gsdBody(): string {
-  return `# Workflow: Get Shit Done (GSD)
-
-**Core insight:** Context rot degrades AI output quality as the window fills. GSD forces clean context windows per phase.
-
-**The 6-phase cycle:**
-1. **New Project** — clean context window, state goal
-2. **Discuss** — clarify requirements before planning
-3. **Plan** — produce a structured plan doc in \`.claude/specs/\`
-4. **Execute** — implement the plan in atomic commits
-5. **Verify** — run tests, lint, build; verify the work matches the plan
-6. **Complete Milestone** — commit, push, and clear context for next task
-
-**Rules:**
-- Start each major feature with a fresh context window
-- Never skip the Discuss → Plan phases for non-trivial work
-- Atomic commits per task in the plan
 `
 }
 
