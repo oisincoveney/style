@@ -173,110 +173,48 @@ describe('generateClaudeSettings', () => {
     expect(allowRule?.if).toContain('vp check')
   })
 
-  describe('audit-log hook (enforcement.auditLog)', () => {
-    it('omits audit-log.sh when auditLog is unset', () => {
+  describe('all hardening hooks register unconditionally', () => {
+    it('always registers audit-log.sh on PreToolUse with no matcher', () => {
       const settings = generateClaudeSettings(tsFrontendConfig)
-      const pre = JSON.stringify(settings.hooks.PreToolUse ?? [])
-      expect(pre).not.toContain('audit-log.sh')
-    })
-
-    it('registers audit-log.sh on PreToolUse with no matcher when auditLog is true', () => {
-      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { auditLog: true } }
-      const settings = generateClaudeSettings(cfg)
       const matcherless = (settings.hooks.PreToolUse ?? []).find((e) => e.matcher === undefined)
-      expect(matcherless).toBeDefined()
       expect(matcherless?.hooks.some((h) => h.command.includes('audit-log.sh'))).toBe(true)
     })
-  })
 
-  describe('citation-check hook (enforcement.citationCheck)', () => {
-    it('omits citation-check.sh from Stop when citationCheck is unset', () => {
+    it('always registers docs-first.sh on PreToolUse Read|Glob', () => {
       const settings = generateClaudeSettings(tsFrontendConfig)
-      const stop = JSON.stringify(settings.hooks.Stop ?? [])
-      expect(stop).not.toContain('citation-check.sh')
+      const entry = (settings.hooks.PreToolUse ?? []).find((e) => e.matcher === 'Read|Glob')
+      expect(entry?.hooks.some((h) => h.command.includes('docs-first.sh'))).toBe(true)
     })
 
-    it('registers citation-check.sh on Stop when citationCheck is true', () => {
-      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { citationCheck: true } }
-      const settings = generateClaudeSettings(cfg)
-      const stop = settings.hooks.Stop ?? []
-      const commands = stop.flatMap((e) => e.hooks.map((h) => h.command))
+    it('always registers citation-check.sh on Stop', () => {
+      const settings = generateClaudeSettings(tsFrontendConfig)
+      const commands = (settings.hooks.Stop ?? []).flatMap((e) =>
+        e.hooks.map((h) => h.command),
+      )
       expect(commands.some((c) => c.includes('citation-check.sh'))).toBe(true)
     })
-  })
 
-  describe('Context7 MCP (mcp.context7)', () => {
-    it('omits context7 mcpServer when mcp.context7 is unset', () => {
+    it('always registers baseline-pin.sh on SessionStart and baseline-compare.sh on Stop, in order', () => {
       const settings = generateClaudeSettings(tsFrontendConfig)
-      expect(settings.mcpServers?.context7).toBeUndefined()
-    })
-
-    it('omits context7 mcpServer when mcp.context7 is false', () => {
-      const cfg: DevConfig = { ...tsFrontendConfig, mcp: { context7: false } }
-      const settings = generateClaudeSettings(cfg)
-      expect(settings.mcpServers?.context7).toBeUndefined()
-    })
-
-    it('emits context7 mcpServer pointing at @upstash/context7-mcp when enabled', () => {
-      const cfg: DevConfig = { ...tsFrontendConfig, mcp: { context7: true } }
-      const settings = generateClaudeSettings(cfg)
-      const c7 = settings.mcpServers?.context7 as { command: string; args: string[] }
-      expect(c7).toBeDefined()
-      expect(c7.command).toBe('npx')
-      expect(c7.args).toContain('-y')
-      expect(c7.args.some((a) => a.includes('@upstash/context7-mcp'))).toBe(true)
-    })
-  })
-
-  describe('docs-first hook (enforcement.docsFirst)', () => {
-    it('omits docs-first.sh when docsFirst is unset', () => {
-      const settings = generateClaudeSettings(tsFrontendConfig)
-      const pre = JSON.stringify(settings.hooks.PreToolUse ?? [])
-      expect(pre).not.toContain('docs-first.sh')
-    })
-
-    it('registers docs-first.sh on PreToolUse Read|Glob when docsFirst is true', () => {
-      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { docsFirst: true } }
-      const settings = generateClaudeSettings(cfg)
-      const readEntry = (settings.hooks.PreToolUse ?? []).find(
-        (e) => e.matcher === 'Read|Glob',
+      const ss = (settings.hooks.SessionStart ?? []).flatMap((e) =>
+        e.hooks.map((h) => h.command),
       )
-      expect(readEntry).toBeDefined()
-      expect(readEntry?.hooks.some((h) => h.command.includes('docs-first.sh'))).toBe(true)
-    })
-  })
+      const bootstrapIdx = ss.findIndex((c) => c.includes('context-bootstrap.sh'))
+      const pinIdx = ss.findIndex((c) => c.includes('baseline-pin.sh'))
+      expect(bootstrapIdx).toBeGreaterThanOrEqual(0)
+      expect(pinIdx).toBeGreaterThan(bootstrapIdx)
 
-  describe('require-claim hook (beadsWorkflow.requireClaim)', () => {
-    it('omits require-claim.sh from PreToolUse when requireClaim is unset', () => {
+      const stop = (settings.hooks.Stop ?? []).flatMap((e) => e.hooks.map((h) => h.command))
+      const preStopIdx = stop.findIndex((c) => c.includes('pre-stop-verification.sh'))
+      const compareIdx = stop.findIndex((c) => c.includes('baseline-compare.sh'))
+      const bannedIdx = stop.findIndex((c) => c.includes('banned-words-guard.sh'))
+      expect(preStopIdx).toBeGreaterThanOrEqual(0)
+      expect(compareIdx).toBeGreaterThan(preStopIdx)
+      expect(bannedIdx).toBeGreaterThan(compareIdx)
+    })
+
+    it('always registers ai-antipattern-guard.sh on PreToolUse + PostToolUse + Stop', () => {
       const settings = generateClaudeSettings(tsFrontendConfig)
-      const pre = JSON.stringify(settings.hooks.PreToolUse ?? [])
-      expect(pre).not.toContain('require-claim.sh')
-    })
-
-    it('registers require-claim.sh on PreToolUse Write|Edit when requireClaim is true', () => {
-      const cfg: DevConfig = { ...tsFrontendConfig, beadsWorkflow: { requireClaim: true } }
-      const settings = generateClaudeSettings(cfg)
-      const writeEntry = (settings.hooks.PreToolUse ?? []).find(
-        (e) => e.matcher === 'Write|Edit',
-      )
-      expect(writeEntry).toBeDefined()
-      const commands = writeEntry?.hooks.map((h) => h.command) ?? []
-      expect(commands.some((c) => c.includes('require-claim.sh'))).toBe(true)
-    })
-  })
-
-  describe('multi-event hook coverage (enforcement.multiEvent)', () => {
-    it('registers ai-antipattern-guard.sh only on PreToolUse when multiEvent is unset', () => {
-      const settings = generateClaudeSettings(tsFrontendConfig)
-      const post = JSON.stringify(settings.hooks.PostToolUse ?? [])
-      const stop = JSON.stringify(settings.hooks.Stop ?? [])
-      expect(post).not.toContain('ai-antipattern-guard.sh')
-      expect(stop).not.toContain('ai-antipattern-guard.sh')
-    })
-
-    it('registers ai-antipattern-guard.sh on PreToolUse + PostToolUse + Stop when multiEvent is true', () => {
-      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { multiEvent: true } }
-      const settings = generateClaudeSettings(cfg)
       const pre = JSON.stringify(settings.hooks.PreToolUse ?? [])
       const post = JSON.stringify(settings.hooks.PostToolUse ?? [])
       const stop = JSON.stringify(settings.hooks.Stop ?? [])
@@ -284,49 +222,39 @@ describe('generateClaudeSettings', () => {
       expect(post).toContain('ai-antipattern-guard.sh')
       expect(stop).toContain('ai-antipattern-guard.sh')
     })
-  })
 
-  describe('baseline pinning (enforcement.baselinePin)', () => {
-    it('omits baseline hooks when enforcement.baselinePin is unset', () => {
-      const settings = generateClaudeSettings(tsFrontendConfig)
-      const allCommands = JSON.stringify(settings.hooks)
-      expect(allCommands).not.toContain('baseline-pin.sh')
-      expect(allCommands).not.toContain('baseline-compare.sh')
+    it('registers require-claim.sh on PreToolUse Write|Edit when tools includes beads', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
+      const settings = generateClaudeSettings(cfg)
+      const writeEntry = (settings.hooks.PreToolUse ?? []).find(
+        (e) => e.matcher === 'Write|Edit',
+      )
+      const commands = writeEntry?.hooks.map((h) => h.command) ?? []
+      expect(commands.some((c) => c.includes('require-claim.sh'))).toBe(true)
     })
 
-    it('omits baseline hooks when enforcement.baselinePin is false', () => {
-      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { baselinePin: false } }
+    it('omits require-claim.sh when tools does NOT include beads', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
       const settings = generateClaudeSettings(cfg)
-      const allCommands = JSON.stringify(settings.hooks)
-      expect(allCommands).not.toContain('baseline-pin.sh')
-      expect(allCommands).not.toContain('baseline-compare.sh')
+      const writeEntry = (settings.hooks.PreToolUse ?? []).find(
+        (e) => e.matcher === 'Write|Edit',
+      )
+      const commands = writeEntry?.hooks.map((h) => h.command) ?? []
+      expect(commands.some((c) => c.includes('require-claim.sh'))).toBe(false)
     })
 
-    it('registers baseline-pin.sh on SessionStart after context-bootstrap.sh when enabled', () => {
-      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { baselinePin: true } }
+    it('registers context7 mcpServer when tools includes beads', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, tools: ['beads'] }
       const settings = generateClaudeSettings(cfg)
-      const sessionStart = settings.hooks.SessionStart ?? []
-      const commands = sessionStart.flatMap((e) => e.hooks.map((h) => h.command))
-      const bootstrapIndex = commands.findIndex((c) => c.includes('context-bootstrap.sh'))
-      const pinIndex = commands.findIndex((c) => c.includes('baseline-pin.sh'))
-      expect(bootstrapIndex).toBeGreaterThanOrEqual(0)
-      expect(pinIndex).toBeGreaterThanOrEqual(0)
-      expect(pinIndex).toBeGreaterThan(bootstrapIndex)
+      const c7 = settings.mcpServers?.context7 as { command: string; args: string[] }
+      expect(c7?.command).toBe('npx')
+      expect(c7?.args.some((a) => a.includes('@upstash/context7-mcp'))).toBe(true)
     })
 
-    it('registers baseline-compare.sh on Stop in the order pre-stop → baseline → banned when enabled', () => {
-      const cfg: DevConfig = { ...tsFrontendConfig, enforcement: { baselinePin: true } }
+    it('omits context7 mcpServer when tools does NOT include beads', () => {
+      const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
       const settings = generateClaudeSettings(cfg)
-      const stop = settings.hooks.Stop ?? []
-      const commands = stop.flatMap((e) => e.hooks.map((h) => h.command))
-      const preStopIdx = commands.findIndex((c) => c.includes('pre-stop-verification.sh'))
-      const compareIdx = commands.findIndex((c) => c.includes('baseline-compare.sh'))
-      const bannedIdx = commands.findIndex((c) => c.includes('banned-words-guard.sh'))
-      expect(preStopIdx).toBeGreaterThanOrEqual(0)
-      expect(compareIdx).toBeGreaterThanOrEqual(0)
-      expect(bannedIdx).toBeGreaterThanOrEqual(0)
-      expect(compareIdx).toBeGreaterThan(preStopIdx)
-      expect(bannedIdx).toBeGreaterThan(compareIdx)
+      expect(settings.mcpServers?.context7).toBeUndefined()
     })
   })
 })

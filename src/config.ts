@@ -11,26 +11,6 @@ export type Language = 'typescript' | 'rust' | 'go' | 'swift' | 'other'
 export type WorkflowFramework = 'bd' | 'none'
 export type PackageManager = 'bun' | 'pnpm' | 'yarn' | 'npm' | 'cargo' | 'go' | 'swift' | 'other'
 export type Target = 'claude' | 'codex' | 'opencode' | 'cursor' | 'lefthook'
-export type IssueTemplateFormat = 'ears' | 'gherkin' | 'checklist'
-
-export interface EnforcementConfig {
-  baselinePin?: boolean
-  docsFirst?: boolean
-  symbolCheck?: boolean
-  auditLog?: boolean
-  multiEvent?: boolean
-  citationCheck?: boolean
-}
-
-export interface BeadsWorkflowConfig {
-  epicTicketLoop?: boolean
-  issueTemplates?: IssueTemplateFormat
-  requireClaim?: boolean
-}
-
-export interface McpConfig {
-  context7?: boolean
-}
 
 export interface DevConfig {
   language: Language
@@ -58,9 +38,6 @@ export interface DevConfig {
     review: string
   }
   bannedWords?: ReadonlyArray<string>
-  enforcement?: EnforcementConfig
-  beadsWorkflow?: BeadsWorkflowConfig
-  mcp?: McpConfig
 }
 
 const CONFIG_FILENAME = '.dev.config.json'

@@ -66,58 +66,32 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
     'bd *',
   ].join('|')
 
-  const baselinePin = config.enforcement?.baselinePin === true
-  const multiEvent = config.enforcement?.multiEvent === true
-  const docsFirst = config.enforcement?.docsFirst === true
-  const citationCheck = config.enforcement?.citationCheck === true
-  const auditLog = config.enforcement?.auditLog === true
-  const requireClaim = config.beadsWorkflow?.requireClaim === true
-
-  const sessionStartHooks: HookCommand[] = [hook('context-bootstrap.sh', 10)]
-  if (baselinePin) {
-    sessionStartHooks.push(hook('baseline-pin.sh', 120))
-  }
-
-  const stopHooks: HookCommand[] = [hook('pre-stop-verification.sh', 30)]
-  if (baselinePin) {
-    stopHooks.push(hook('baseline-compare.sh', 120))
-  }
-  if (citationCheck) {
-    stopHooks.push(hook('citation-check.sh', 10))
-  }
-  if (multiEvent) {
-    stopHooks.push(hook('ai-antipattern-guard.sh', 10))
-  }
-  stopHooks.push(hook('banned-words-guard.sh', 10))
+  const beadsEnabled = config.tools.includes('beads')
 
   const settings: ClaudeSettings = {
     hooks: {
-      SessionStart: [{ hooks: sessionStartHooks }],
+      SessionStart: [
+        {
+          hooks: [hook('context-bootstrap.sh', 10), hook('baseline-pin.sh', 120)],
+        },
+      ],
       UserPromptSubmit: [
         {
           hooks: [hook('context-injector.sh', 5)],
         },
       ],
       PreToolUse: [
-        ...(auditLog
-          ? [
-              {
-                hooks: [hook('audit-log.sh', 5)],
-              },
-            ]
-          : []),
-        ...(docsFirst
-          ? [
-              {
-                matcher: 'Read|Glob',
-                hooks: [hook('docs-first.sh', 5)],
-              },
-            ]
-          : []),
+        {
+          hooks: [hook('audit-log.sh', 5)],
+        },
+        {
+          matcher: 'Read|Glob',
+          hooks: [hook('docs-first.sh', 5)],
+        },
         {
           matcher: 'Write|Edit',
           hooks: [
-            ...(requireClaim ? [hook('require-claim.sh', 5)] : []),
+            ...(beadsEnabled ? [hook('require-claim.sh', 5)] : []),
             ...(config.language === 'typescript'
               ? [hook('ts-style-guard.sh', 30), hook('import-validator.sh', 10)]
               : []),
@@ -139,13 +113,20 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
       PostToolUse: [
         {
           matcher: 'Write|Edit',
+          hooks: [hook('post-edit-check.sh', 60), hook('ai-antipattern-guard.sh', 10)],
+        },
+      ],
+      Stop: [
+        {
           hooks: [
-            hook('post-edit-check.sh', 60),
-            ...(multiEvent ? [hook('ai-antipattern-guard.sh', 10)] : []),
+            hook('pre-stop-verification.sh', 30),
+            hook('baseline-compare.sh', 120),
+            hook('citation-check.sh', 10),
+            hook('ai-antipattern-guard.sh', 10),
+            hook('banned-words-guard.sh', 10),
           ],
         },
       ],
-      Stop: [{ hooks: stopHooks }],
       PreCompact: [
         {
           hooks: [hook('pre-compact-prime.sh', 10)],
@@ -206,7 +187,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
     },
   }
 
-  if (config.mcp?.context7 === true) {
+  if (beadsEnabled) {
     settings.mcpServers = {
       ...(settings.mcpServers ?? {}),
       context7: {

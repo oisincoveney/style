@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -25,7 +25,7 @@ const baseConfig: DevConfig = {
   targets: ['claude'],
 }
 
-describe('config schema — enforcement / beadsWorkflow / mcp fields (A1)', () => {
+describe('readConfig — workflow deprecation coercion', () => {
   let dir: string
 
   beforeEach(() => {
@@ -36,88 +36,11 @@ describe('config schema — enforcement / beadsWorkflow / mcp fields (A1)', () =
     rmSync(dir, { recursive: true, force: true })
   })
 
-  it('round-trips an enforcement block with all five flags', () => {
-    const cfg: DevConfig = {
-      ...baseConfig,
-      enforcement: {
-        baselinePin: true,
-        docsFirst: true,
-        symbolCheck: false,
-        auditLog: true,
-        multiEvent: false,
-      },
-    }
-    writeConfig(dir, cfg)
-    const loaded = readConfig(dir)
-    expect(loaded?.enforcement).toEqual({
-      baselinePin: true,
-      docsFirst: true,
-      symbolCheck: false,
-      auditLog: true,
-      multiEvent: false,
-    })
-  })
-
-  it('round-trips a beadsWorkflow block with all three fields', () => {
-    const cfg: DevConfig = {
-      ...baseConfig,
-      beadsWorkflow: {
-        epicTicketLoop: true,
-        issueTemplates: 'ears',
-        requireClaim: true,
-      },
-    }
-    writeConfig(dir, cfg)
-    const loaded = readConfig(dir)
-    expect(loaded?.beadsWorkflow).toEqual({
-      epicTicketLoop: true,
-      issueTemplates: 'ears',
-      requireClaim: true,
-    })
-  })
-
-  it('round-trips an mcp.context7 flag', () => {
-    const cfg: DevConfig = { ...baseConfig, mcp: { context7: true } }
-    writeConfig(dir, cfg)
-    const loaded = readConfig(dir)
-    expect(loaded?.mcp).toEqual({ context7: true })
-  })
-
-  it('treats omitted enforcement, beadsWorkflow, and mcp as undefined', () => {
-    writeConfig(dir, baseConfig)
-    const loaded = readConfig(dir)
-    expect(loaded?.enforcement).toBeUndefined()
-    expect(loaded?.beadsWorkflow).toBeUndefined()
-    expect(loaded?.mcp).toBeUndefined()
-  })
-
-  it('accepts each issueTemplates literal: ears | gherkin | checklist', () => {
-    for (const value of ['ears', 'gherkin', 'checklist'] as const) {
-      const cfg: DevConfig = {
-        ...baseConfig,
-        beadsWorkflow: { issueTemplates: value },
-      }
-      writeConfig(dir, cfg)
-      const loaded = readConfig(dir)
-      expect(loaded?.beadsWorkflow?.issueTemplates).toBe(value)
-    }
-  })
-
-  it('preserves a partial enforcement block (only some flags set)', () => {
-    const cfg: DevConfig = {
-      ...baseConfig,
-      enforcement: { baselinePin: true },
-    }
-    writeConfig(dir, cfg)
-    const loaded = readConfig(dir)
-    expect(loaded?.enforcement?.baselinePin).toBe(true)
-    expect(loaded?.enforcement?.docsFirst).toBeUndefined()
-  })
-
   it('coerces legacy workflow="idd" to "none" with a deprecation warning', () => {
-    const path = `${dir}/.dev.config.json`
-    const raw = JSON.stringify({ ...baseConfig, workflow: 'idd' }, null, 2)
-    require('node:fs').writeFileSync(path, raw)
+    writeFileSync(
+      join(dir, '.dev.config.json'),
+      JSON.stringify({ ...baseConfig, workflow: 'idd' }, null, 2),
+    )
     const warnings: string[] = []
     const orig = console.warn
     console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '))
@@ -131,9 +54,10 @@ describe('config schema — enforcement / beadsWorkflow / mcp fields (A1)', () =
   })
 
   it('coerces legacy workflow="gsd" to "none" with a deprecation warning', () => {
-    const path = `${dir}/.dev.config.json`
-    const raw = JSON.stringify({ ...baseConfig, workflow: 'gsd' }, null, 2)
-    require('node:fs').writeFileSync(path, raw)
+    writeFileSync(
+      join(dir, '.dev.config.json'),
+      JSON.stringify({ ...baseConfig, workflow: 'gsd' }, null, 2),
+    )
     const warnings: string[] = []
     const orig = console.warn
     console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '))
@@ -151,5 +75,12 @@ describe('config schema — enforcement / beadsWorkflow / mcp fields (A1)', () =
     writeConfig(dir, cfg)
     const loaded = readConfig(dir)
     expect(loaded?.workflow).toBe('bd')
+  })
+
+  it('does not contain enforcement, beadsWorkflow, or mcp fields on DevConfig', () => {
+    const cfg = baseConfig
+    expect('enforcement' in cfg).toBe(false)
+    expect('beadsWorkflow' in cfg).toBe(false)
+    expect('mcp' in cfg).toBe(false)
   })
 })

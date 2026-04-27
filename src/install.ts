@@ -166,7 +166,7 @@ export async function installAll(
   // No `.claude/specs/`, `.claude/plans/`, or `docs/research/` directories
   // are created — the bd database holds all of that.
 
-  if (config.enforcement?.auditLog === true) {
+  if (config.targets.includes('claude')) {
     appendToGitignore(cwd, '.claude/audit.jsonl')
   }
 
