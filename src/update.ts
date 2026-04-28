@@ -6,7 +6,9 @@
  * touching user-customised files (lefthook.yml, lint configs).
  */
 
-import { existsSync } from 'node:fs'
+import { execSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as p from '@clack/prompts'
 import { readConfig } from './config.js'
@@ -17,6 +19,7 @@ import {
   stripLegacyConfigFields,
   trimBeadsIntegrationOnAgentDocs,
 } from './install.js'
+import type { DriftCandidate, DriftDecision } from './manifest.js'
 
 export async function runUpdate(): Promise<void> {
   p.intro('@oisincoveney/dev update')
@@ -55,15 +58,14 @@ export async function runUpdate(): Promise<void> {
   }
 
   const acceptLefthook = process.argv.includes('--accept-lefthook-overwrite')
+  const isInteractive = process.stdout.isTTY === true && process.stdin.isTTY === true
 
-  const spinner = p.spinner()
-  spinner.start('Updating hooks, docs, and settings')
   const result = await installAll(cwd, config, {} as never, {
     skipSideEffects: true,
     isUpdate: true,
     acceptLefthookOverwrite: acceptLefthook,
+    onDrift: isInteractive ? promptDrift : undefined,
   })
-  spinner.stop('Done')
 
   if (result.manifest) {
     if (result.manifest.lefthookDrift && !acceptLefthook) {
@@ -76,9 +78,15 @@ export async function runUpdate(): Promise<void> {
       process.exit(1)
     }
 
+    if (result.manifest.promptKept.length > 0) {
+      p.log.info(
+        `Kept your version of ${result.manifest.promptKept.length} file(s): ${result.manifest.promptKept.join(', ')}`,
+      )
+    }
+
     if (result.manifest.devNew.length > 0) {
       p.log.warn(
-        `Drifted files; new versions written next to yours: ${result.manifest.devNew.join(', ')}. Diff and reconcile.`,
+        `Drifted files written as .dev-new sidecars (non-interactive run): ${result.manifest.devNew.join(', ')}. Diff and reconcile.`,
       )
     }
 
@@ -88,4 +96,43 @@ export async function runUpdate(): Promise<void> {
   }
 
   p.outro('Commit the updated files.')
+}
+
+async function promptDrift(candidate: DriftCandidate): Promise<DriftDecision> {
+  while (true) {
+    const choice = await p.select<'keep' | 'take' | 'diff' | 'abort'>({
+      message: `${candidate.relPath} differs from what 0.x ships. ${candidate.severity === 'super' ? 'Heavily modified.' : 'Mildly modified.'} What do you want to do?`,
+      options: [
+        { value: 'take', label: 'Take new version (overwrite mine)' },
+        { value: 'keep', label: 'Keep my version (manifest hash will match mine)' },
+        { value: 'diff', label: 'Show diff first' },
+        { value: 'abort', label: 'Abort update' },
+      ],
+    })
+
+    if (p.isCancel(choice) || choice === 'abort') return 'abort'
+    if (choice === 'keep') return 'keep'
+    if (choice === 'take') return 'take'
+
+    showDiff(candidate)
+  }
+}
+
+function showDiff(candidate: DriftCandidate): void {
+  const tmp = mkdtempSync(join(tmpdir(), 'oisin-dev-diff-'))
+  const currentPath = join(tmp, 'current')
+  const newPath = join(tmp, 'new')
+  try {
+    writeFileSync(currentPath, candidate.currentContent)
+    writeFileSync(newPath, candidate.newContent)
+    try {
+      execSync(`git --no-pager diff --no-index --color=always "${currentPath}" "${newPath}"`, {
+        stdio: 'inherit',
+      })
+    } catch {
+      // git diff --no-index exits 1 when files differ — that's expected.
+    }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true })
+  }
 }

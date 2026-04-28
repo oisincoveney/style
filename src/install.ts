@@ -50,6 +50,8 @@ export interface InstallOptions {
   isUpdate?: boolean
   /** Override lefthook.yml drift on update (caller has explicitly opted in). */
   acceptLefthookOverwrite?: boolean
+  /** Interactive drift handler — invoked per drifted file on update. When omitted, update writes .dev-new sidecars. */
+  onDrift?: import('./manifest.js').DriftHandler
 }
 
 export interface InstallResult {
@@ -82,11 +84,12 @@ export async function installAll(
   }
 
   const allFiles = gatherAllManagedFiles({ cwd, config, answers, options, warn })
-  installResult.manifest = applyManagedFiles(cwd, {
+  installResult.manifest = await applyManagedFiles(cwd, {
     version: getPackageVersion(),
     files: allFiles,
     mode: options.isUpdate ? 'update' : 'init',
     acceptLefthookOverwrite: options.acceptLefthookOverwrite,
+    onDrift: options.onDrift,
   })
 
   if (config.targets.includes('claude')) {

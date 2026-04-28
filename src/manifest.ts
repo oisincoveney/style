@@ -31,11 +31,28 @@ export function classifyDrift(current: string, expected: string): DriftSeverity 
 
 const LEFTHOOK_PATH = 'lefthook.yml'
 
+export type DriftDecision = 'keep' | 'take' | 'abort'
+
+export interface DriftCandidate {
+  relPath: string
+  currentContent: string
+  newContent: string
+  severity: 'mild' | 'super'
+}
+
+export type DriftHandler = (candidate: DriftCandidate) => Promise<DriftDecision>
+
 export interface ApplyManagedFilesOptions {
   version: string
   files: Map<string, string>
   mode: 'init' | 'update'
   acceptLefthookOverwrite?: boolean
+  /**
+   * If provided AND mode='update', called per drifted file to ask the user
+   * whether to keep their version, take the new one, or abort. When omitted,
+   * update falls back to writing `.dev-new` sidecars (CI / scripted runs).
+   */
+  onDrift?: DriftHandler
 }
 
 export interface SuperDriftEntry {
@@ -53,12 +70,15 @@ export interface ApplyManagedFilesResult {
   removed: string[]
   lefthookDrift: boolean
   lefthookDriftDetails?: { currentContent: string; newContent: string }
+  /** Files where the onDrift handler returned 'keep' — recorded so the
+   * caller can summarize "you kept your version of these N files." */
+  promptKept: string[]
 }
 
-export function applyManagedFiles(
+export async function applyManagedFiles(
   cwd: string,
   options: ApplyManagedFilesOptions,
-): ApplyManagedFilesResult {
+): Promise<ApplyManagedFilesResult> {
   const result: ApplyManagedFilesResult = {
     written: [],
     backups: [],
@@ -67,6 +87,7 @@ export function applyManagedFiles(
     devNew: [],
     removed: [],
     lefthookDrift: false,
+    promptKept: [],
   }
 
   const prior = readManifest(cwd)
@@ -84,6 +105,29 @@ export function applyManagedFiles(
       prior?.files[relPath] === undefined
     ) {
       action = { kind: 'mild-drift' }
+    }
+
+    if (
+      options.mode === 'update' &&
+      options.onDrift &&
+      (action.kind === 'mild-drift' || action.kind === 'super-drift')
+    ) {
+      const currentContent = readFileSync(absPath, 'utf8')
+      const decision = await options.onDrift({
+        relPath,
+        currentContent,
+        newContent: content,
+        severity: action.kind === 'super-drift' ? 'super' : 'mild',
+      })
+      if (decision === 'abort') {
+        throw new Error(`Update aborted by user at ${relPath}`)
+      }
+      if (decision === 'keep') {
+        result.promptKept.push(relPath)
+        newFiles[relPath] = { sha256: hashContent(currentContent) }
+        continue
+      }
+      action = { kind: 'clean-replace' }
     }
     applyWriteAction(absPath, content, relPath, action, options.mode, result)
     newFiles[relPath] = { sha256: hashContent(content) }
