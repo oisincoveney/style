@@ -277,16 +277,17 @@ describe('installAll', () => {
     expect(second).toContain('My extra section')
   })
 
-  it('backs up existing lint configs before overwriting', async () => {
+  it('backs up existing lint configs to .user-backup before overwriting (manifest .user-backup, not legacy .dev-backup)', async () => {
     const { writeFileSync } = await import('node:fs')
     const customClippy = '# my custom clippy config\ncognitive-complexity-threshold = 999\n'
     writeFileSync(join(dir, 'clippy.toml'), customClippy)
 
     await installAll(dir, fakeConfig, fakeAnswers, { skipSideEffects: true })
 
-    expect(existsSync(join(dir, 'clippy.toml.dev-backup'))).toBe(true)
-    const backup = readFileSync(join(dir, 'clippy.toml.dev-backup'), 'utf8')
+    expect(existsSync(join(dir, 'clippy.toml.user-backup'))).toBe(true)
+    const backup = readFileSync(join(dir, 'clippy.toml.user-backup'), 'utf8')
     expect(backup).toBe(customClippy)
+    expect(existsSync(join(dir, 'clippy.toml.dev-backup'))).toBe(false)
   })
 
   it('writes correct files for a swift-app project (Pinny-style)', async () => {

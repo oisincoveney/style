@@ -78,6 +78,13 @@ export function applyManagedFiles(
     if (action.kind === 'lefthook-drift' && options.acceptLefthookOverwrite === true) {
       action = { kind: 'clean-replace' }
     }
+    if (
+      action.kind === 'super-drift' &&
+      options.mode === 'init' &&
+      prior?.files[relPath] === undefined
+    ) {
+      action = { kind: 'mild-drift' }
+    }
     applyWriteAction(absPath, content, relPath, action, options.mode, result)
     newFiles[relPath] = { sha256: hashContent(content) }
   }

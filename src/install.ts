@@ -72,127 +72,49 @@ export async function installAll(
     console.log(`  ⚠ ${msg}`)
   }
 
-  // ─── File generation ────────────────────────────────────────────────
+  // ─── File generation: gather everything, apply via manifest ────────
 
   if (config.targets.includes('claude')) {
     const seed = seedManifestFromKnownFiles(cwd, getPackageVersion())
     if (seed.seeded) {
       log(`seeded manifest from ${seed.fileCount} prior-version files`)
     }
-    const managedFiles = gatherClaudeHooks()
-    installResult.manifest = applyManagedFiles(cwd, {
-      version: getPackageVersion(),
-      files: managedFiles,
-      mode: options.isUpdate ? 'update' : 'init',
-      acceptLefthookOverwrite: options.acceptLefthookOverwrite,
-    })
-    installClaudeHooks(cwd, log)
-    const settings = generateClaudeSettings(config)
+  }
+
+  const allFiles = gatherAllManagedFiles({ cwd, config, answers, options, warn })
+  installResult.manifest = applyManagedFiles(cwd, {
+    version: getPackageVersion(),
+    files: allFiles,
+    mode: options.isUpdate ? 'update' : 'init',
+    acceptLefthookOverwrite: options.acceptLefthookOverwrite,
+  })
+
+  if (config.targets.includes('claude')) {
+    chmodHooksDir(join(cwd, '.claude', 'hooks'))
+    log('.claude/hooks/ (chmod +x)')
+
+    const settingsPath = join(cwd, '.claude', 'settings.json')
+    const generatedSettings = generateClaudeSettings(config)
     if (options.isUpdate) {
-      writeOrMergeSettings(join(cwd, '.claude', 'settings.json'), settings, log)
+      writeOrMergeSettings(settingsPath, generatedSettings, log)
     } else {
-      writeJson(join(cwd, '.claude', 'settings.json'), settings)
+      writeJson(settingsPath, generatedSettings)
       log('.claude/settings.json')
     }
-    installOwnedSkills(cwd, config, log)
-    installProjectSkills(cwd, config, log, warn)
-  }
 
+    appendToGitignore(cwd, '.claude/audit.jsonl')
+  }
   if (config.targets.includes('codex')) {
-    installCodexHooks(cwd, log)
-    const hooks = generateCodexHooks(config)
-    writeJson(join(cwd, '.codex', 'hooks.json'), hooks)
-    log('.codex/hooks.json')
+    chmodHooksDir(join(cwd, '.codex', 'hooks'))
+    log('.codex/hooks/ (chmod +x)')
   }
 
-  if (config.targets.includes('opencode')) {
-    const plugin = generateOpencodePlugin(config)
-    const pluginDir = join(cwd, '.opencode', 'plugins')
-    mkdirSync(pluginDir, { recursive: true })
-    writeFileSync(join(pluginDir, 'dev-enforcer.ts'), plugin)
-    log('.opencode/plugins/dev-enforcer.ts')
-  }
-
-  if (config.targets.includes('cursor')) {
-    const rules = generateCursorRules(config, TEMPLATES_DIR)
-    const rulesDir = join(cwd, '.cursor', 'rules')
-    mkdirSync(rulesDir, { recursive: true })
-    for (const rule of rules) {
-      writeFileSync(join(rulesDir, rule.filename), rule.content)
-      log(`.cursor/rules/${rule.filename}`)
-    }
-  }
-
-  if (config.targets.includes('lefthook')) {
-    if (options.isUpdate) {
-      warn('lefthook.yml — skipped on update (merge manually if needed)')
-    } else {
-      const lefthook = generateLefthook(config)
-      writeFileSync(join(cwd, 'lefthook.yml'), lefthook)
-      log('lefthook.yml')
-    }
-  }
-
-  if (!options.isUpdate) {
-    // Language-specific lint/format configs. Warn before overwriting existing.
-    const lintConfigs = generateLintConfig(config)
-    for (const [filename, contents] of Object.entries(lintConfigs)) {
-      const dest = join(cwd, filename)
-      if (existsSync(dest)) {
-        const backup = `${dest}.dev-backup`
-        copyFileSync(dest, backup)
-        warn(`${filename} already exists — backed up to ${filename}.dev-backup`)
-      }
-      writeFileSync(dest, contents)
-      log(filename)
-    }
-
-    // Tool configs (Semgrep, commitlint, Stryker/cargo-mutants/go-mutesting,
-    // dependency-cruiser, strict tsconfig)
-    const toolConfigs = generateToolConfigs(config)
-    for (const [filename, contents] of Object.entries(toolConfigs)) {
-      const dest = join(cwd, filename)
-      if (existsSync(dest)) {
-        const backup = `${dest}.dev-backup`
-        copyFileSync(dest, backup)
-        warn(`${filename} already exists — backed up to ${filename}.dev-backup`)
-      }
-      writeFileSync(dest, contents)
-      log(filename)
-    }
-  }
-
-  // CLAUDE.md and AGENTS.md — small kernel; the detail lives in .claude/rules/.
+  // CLAUDE.md and AGENTS.md are hybrid (managed block + user content). They
+  // keep writeOrMerge semantics rather than going through the manifest, which
+  // would treat user-added content outside the managed block as drift.
   const bundle = buildClaudeMdBundle(config, answers)
   writeOrMerge(join(cwd, 'CLAUDE.md'), bundle.root, log)
   writeOrMerge(join(cwd, 'AGENTS.md'), bundle.root, log)
-
-  // .claude/rules/ — the primary Claude Code context channel.
-  if (config.targets.includes('claude')) {
-    const rulesDir = join(cwd, '.claude', 'rules')
-    mkdirSync(rulesDir, { recursive: true })
-    const rules = generateRules(config, TEMPLATES_DIR)
-    for (const rule of rules) {
-      writeFileSync(join(rulesDir, rule.filename), rule.content)
-      log(`.claude/rules/${rule.filename}`)
-    }
-
-    // .claude/commands/ — single-purpose slash commands.
-    const commandsDir = join(cwd, '.claude', 'commands')
-    mkdirSync(commandsDir, { recursive: true })
-    for (const cmd of generateCommands(config)) {
-      writeFileSync(join(commandsDir, cmd.filename), cmd.content)
-      log(`.claude/commands/${cmd.filename}`)
-    }
-  }
-
-  // bd is the source of truth for specs/plans/research/decisions.
-  // No `.claude/specs/`, `.claude/plans/`, or `docs/research/` directories
-  // are created — the bd database holds all of that.
-
-  if (config.targets.includes('claude')) {
-    appendToGitignore(cwd, '.claude/audit.jsonl')
-  }
 
   // ─── Side-effect installs ───────────────────────────────────────────
 
@@ -294,6 +216,216 @@ function gatherClaudeHooks(): Map<string, string> {
     files.set(`.claude/hooks/${file}`, content)
   }
   return files
+}
+
+function chmodHooksDir(dir: string): void {
+  if (!existsSync(dir)) return
+  for (const file of readdirSync(dir)) {
+    chmodSync(join(dir, file), 0o755)
+  }
+}
+
+function walkDirIntoMap(
+  srcAbs: string,
+  destPrefix: string,
+  out: Map<string, string>,
+  transform?: (relPath: string, content: string) => string,
+): void {
+  if (!existsSync(srcAbs)) return
+  for (const entry of readdirSync(srcAbs, { withFileTypes: true })) {
+    const childSrc = join(srcAbs, entry.name)
+    const childDest = `${destPrefix}/${entry.name}`
+    if (entry.isDirectory()) {
+      walkDirIntoMap(childSrc, childDest, out, transform)
+    } else if (entry.isFile()) {
+      const content = readFileSync(childSrc, 'utf8')
+      out.set(childDest, transform ? transform(childDest, content) : content)
+    }
+  }
+}
+
+function stampSkillFrontmatterContent(
+  content: string,
+  skill: SuperpowerSkill,
+  warn: (msg: string) => void,
+): string {
+  let front: Record<string, string> = {}
+  let body = content
+  if (content.startsWith('---\n')) {
+    const end = content.indexOf('\n---\n', 4)
+    if (end !== -1) {
+      const yaml = content.slice(4, end)
+      body = content.slice(end + 5)
+      for (const line of yaml.split('\n')) {
+        const match = line.match(/^([a-zA-Z_-]+):\s*(.*)$/)
+        if (match) front[match[1]] = match[2]
+      }
+    }
+  }
+  if (skill.classification === 'reference') {
+    front['disable-model-invocation'] = 'true'
+    front['user-invocable'] = 'false'
+  } else if (skill.classification === 'action') {
+    front['disable-model-invocation'] = 'true'
+  }
+  if (skill.allowedTools && skill.allowedTools.length > 0 && !front['allowed-tools']) {
+    front['allowed-tools'] = skill.allowedTools.join(' ')
+  }
+  if (!front['description'] || front['description'].length < 40) {
+    warn(`Skill ${skill.id} has a short or missing description — Claude may not load it.`)
+    if (!front['description']) front['description'] = skill.description
+  }
+  const yamlLines = Object.entries(front).map(([k, v]) => `${k}: ${v}`)
+  return `---\n${yamlLines.join('\n')}\n---\n${body}`
+}
+
+interface GatherContext {
+  cwd: string
+  config: DevConfig
+  answers: Answers
+  options: InstallOptions
+  warn: (msg: string) => void
+}
+
+export function gatherAllManagedFiles(ctx: GatherContext): Map<string, string> {
+  const { config, answers, options, warn } = ctx
+  const out = new Map<string, string>()
+
+  if (config.targets.includes('claude')) {
+    walkDirIntoMap(join(TEMPLATES_DIR, 'hooks'), '.claude/hooks', out)
+    walkDirIntoMap(join(TEMPLATES_DIR, 'skills'), '.claude/skills', out, (relPath, content) => {
+      const parts = relPath.split('/')
+      if (parts.length === 4 && parts[3] === 'SKILL.md') {
+        const skillId = parts[2]
+        if (BD_ONLY_SKILLS.has(skillId) && !config.tools.includes('beads')) {
+          return content
+        }
+      }
+      return content
+    })
+
+    if (config.tools.includes('beads')) {
+      out.delete('.claude/skills/to-bd-issues/SKILL.md')
+      out.delete('.claude/skills/to-bd-issues/LICENSE')
+      out.delete('.claude/skills/spec-verifier/SKILL.md')
+      out.delete('.claude/skills/parallel-tickets/SKILL.md')
+      walkDirIntoMap(
+        join(TEMPLATES_DIR, 'skills', 'to-bd-issues'),
+        '.claude/skills/to-bd-issues',
+        out,
+      )
+      walkDirIntoMap(
+        join(TEMPLATES_DIR, 'skills', 'spec-verifier'),
+        '.claude/skills/spec-verifier',
+        out,
+      )
+      walkDirIntoMap(
+        join(TEMPLATES_DIR, 'skills', 'parallel-tickets'),
+        '.claude/skills/parallel-tickets',
+        out,
+      )
+    } else {
+      for (const id of BD_ONLY_SKILLS) {
+        for (const key of Array.from(out.keys())) {
+          if (key.startsWith(`.claude/skills/${id}/`)) out.delete(key)
+        }
+      }
+    }
+
+    addProjectSkillsToMap(ctx, out)
+
+    for (const rule of generateRules(config, TEMPLATES_DIR)) {
+      out.set(`.claude/rules/${rule.filename}`, rule.content)
+    }
+    for (const cmd of generateCommands(config)) {
+      out.set(`.claude/commands/${cmd.filename}`, cmd.content)
+    }
+
+  }
+
+  if (config.targets.includes('codex')) {
+    walkDirIntoMap(join(TEMPLATES_DIR, 'hooks'), '.codex/hooks', out)
+    out.set('.codex/hooks.json', `${JSON.stringify(generateCodexHooks(config), null, 2)}\n`)
+  }
+
+  if (config.targets.includes('opencode')) {
+    out.set('.opencode/plugins/dev-enforcer.ts', generateOpencodePlugin(config))
+  }
+
+  if (config.targets.includes('cursor')) {
+    for (const rule of generateCursorRules(config, TEMPLATES_DIR)) {
+      out.set(`.cursor/rules/${rule.filename}`, rule.content)
+    }
+  }
+
+  if (config.targets.includes('lefthook') && !options.isUpdate) {
+    out.set('lefthook.yml', generateLefthook(config))
+  }
+
+  if (!options.isUpdate) {
+    for (const [filename, contents] of Object.entries(generateLintConfig(config))) {
+      out.set(filename, contents)
+    }
+    for (const [filename, contents] of Object.entries(generateToolConfigs(config))) {
+      out.set(filename, contents)
+    }
+  }
+
+  return out
+}
+
+function addProjectSkillsToMap(ctx: GatherContext, out: Map<string, string>): void {
+  const selectedSuperpowers = SUPERPOWER_SKILLS.filter((s) => ctx.config.skills.includes(s.id))
+  if (selectedSuperpowers.length === 0) return
+  const globalSkillsDir = join(homedir(), '.agents', 'skills')
+  const fallbackDir = join(homedir(), '.claude', 'skills')
+  const sourceDir = existsSync(globalSkillsDir)
+    ? globalSkillsDir
+    : existsSync(fallbackDir)
+      ? fallbackDir
+      : null
+  if (sourceDir === null) {
+    ctx.warn(`No global skills directory found. Skipping superpower skill copy.`)
+    return
+  }
+  for (const skill of selectedSuperpowers) {
+    const src = join(sourceDir, skill.id)
+    if (!existsSync(src)) {
+      ctx.warn(`Skill not found in ${sourceDir}: ${skill.id}`)
+      continue
+    }
+    walkDirIntoMap(src, `.claude/skills/${skill.id}`, out, (relPath, content) =>
+      relPath.endsWith('/SKILL.md')
+        ? stampSkillFrontmatterContent(content, skill, ctx.warn)
+        : content,
+    )
+  }
+}
+
+function computeSettingsJsonContent(ctx: GatherContext): string {
+  const generated = generateClaudeSettings(ctx.config)
+  if (!ctx.options.isUpdate) {
+    return `${JSON.stringify(generated, null, 2)}\n`
+  }
+  const existingPath = join(ctx.cwd, '.claude', 'settings.json')
+  if (!existsSync(existingPath)) {
+    return `${JSON.stringify(generated, null, 2)}\n`
+  }
+  try {
+    const existingRaw = readFileSync(existingPath, 'utf8')
+    const existing = JSON.parse(existingRaw) as Record<string, unknown>
+    const merged = mergeClaudeSettings(existing, generated as unknown as Record<string, unknown>)
+    return `${JSON.stringify(merged, null, 2)}\n`
+  } catch {
+    return `${JSON.stringify(generated, null, 2)}\n`
+  }
+}
+
+function mergeManagedRoot(cwd: string, file: string, managed: string): string {
+  const path = join(cwd, file)
+  if (!existsSync(path)) return managed
+  const existing = readFileSync(path, 'utf8')
+  return mergeManagedBlock(existing, managed)
 }
 
 function installClaudeHooks(cwd: string, log: (msg: string) => void): void {
@@ -1028,6 +1160,61 @@ function pruneRetiredHooks(hooks: Record<string, HookEntry[]>): Record<string, H
   return result
 }
 
+export function mergeClaudeSettings(
+  existing: Record<string, unknown>,
+  generated: Record<string, unknown>,
+): Record<string, unknown> {
+  const existingHooks = pruneRetiredHooks(
+    ((existing as { hooks?: Record<string, HookEntry[]> }).hooks ?? {}) as Record<
+      string,
+      HookEntry[]
+    >,
+  )
+  const generatedHooks = (generated as { hooks?: Record<string, HookEntry[]> }).hooks ?? {}
+  const mergedHooks: Record<string, HookEntry[]> = { ...existingHooks }
+  for (const [event, genEntries] of Object.entries(generatedHooks)) {
+    if (!mergedHooks[event]) {
+      mergedHooks[event] = genEntries
+      continue
+    }
+    const result: HookEntry[] = [...mergedHooks[event]]
+    for (const genEntry of genEntries) {
+      const matcher = genEntry.matcher
+      const existingIdx = result.findIndex((e) => (e.matcher ?? '') === (matcher ?? ''))
+      if (existingIdx === -1) {
+        result.push(genEntry)
+      } else {
+        const updatedHooks = [...result[existingIdx].hooks]
+        for (const genHook of genEntry.hooks) {
+          const genScript = extractHookScript(genHook.command)
+          const existingIdx2 = genScript
+            ? updatedHooks.findIndex((h) => extractHookScript(h.command) === genScript)
+            : updatedHooks.findIndex((h) => h.command === genHook.command)
+          if (existingIdx2 !== -1) {
+            updatedHooks[existingIdx2] = genHook
+          } else {
+            updatedHooks.push(genHook)
+          }
+        }
+        const seen = new Map<string, number>()
+        for (let i = 0; i < updatedHooks.length; i++) {
+          const key = extractHookScript(updatedHooks[i].command) ?? updatedHooks[i].command
+          seen.set(key, i)
+        }
+        result[existingIdx] = {
+          ...result[existingIdx],
+          hooks: updatedHooks.filter(
+            (_, i) =>
+              seen.get(extractHookScript(updatedHooks[i].command) ?? updatedHooks[i].command) === i,
+          ),
+        }
+      }
+    }
+    mergedHooks[event] = result
+  }
+  return { ...existing, ...generated, hooks: mergedHooks }
+}
+
 function writeOrMergeSettings(
   path: string,
   generated: ReturnType<typeof generateClaudeSettings>,
@@ -1132,5 +1319,16 @@ function writeOrMerge(path: string, managed: string, log: (msg: string) => void)
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+export function mergeManagedBlock(existing: string, managed: string): string {
+  const wrapped = `${DEV_BLOCK_START}\n${managed}\n${DEV_BLOCK_END}\n`
+  if (existing.includes(DEV_BLOCK_START)) {
+    const re = new RegExp(
+      `${escapeRegex(DEV_BLOCK_START)}[\\s\\S]*?${escapeRegex(DEV_BLOCK_END)}\n?`,
+    )
+    return existing.replace(re, wrapped)
+  }
+  return `${wrapped}\n${existing}`
 }
 
