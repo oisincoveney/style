@@ -124,6 +124,17 @@ describe('installAll', () => {
     expect(verifierBody).toContain('discovered-from')
     expect(verifierBody).toContain('Forbidden actions')
 
+    // Parallel-tickets skill ships when beads is enabled
+    expect(existsSync(join(dir, '.claude/skills/parallel-tickets/SKILL.md'))).toBe(true)
+    const parallelBody = readFileSync(
+      join(dir, '.claude/skills/parallel-tickets/SKILL.md'),
+      'utf8',
+    )
+    expect(parallelBody).toContain('isolation:')
+    expect(parallelBody).toContain('Cap: 3 concurrent')
+    expect(parallelBody).toContain('Failure isolation')
+    expect(parallelBody).toContain('do NOT auto-abort siblings')
+
     // Vendored + forked to-bd-issues skill ships with MIT attribution
     expect(existsSync(join(dir, '.claude/skills/to-bd-issues/SKILL.md'))).toBe(true)
     expect(existsSync(join(dir, '.claude/skills/to-bd-issues/LICENSE'))).toBe(true)

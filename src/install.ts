@@ -477,7 +477,7 @@ function installProjectSkills(
  * These are always copied, regardless of superpower selection, because
  * they're referenced by the kernel CLAUDE.md.
  */
-const BD_ONLY_SKILLS = new Set<string>(['to-bd-issues', 'spec-verifier'])
+const BD_ONLY_SKILLS = new Set<string>(['to-bd-issues', 'spec-verifier', 'parallel-tickets'])
 
 function installOwnedSkills(
   cwd: string,
