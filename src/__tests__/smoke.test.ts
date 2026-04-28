@@ -578,6 +578,19 @@ describe('generateRules', () => {
     expect(commands.some((c) => c.includes('bd-context-inject.sh'))).toBe(false)
   })
 
+  it('registers require-swarm.sh on PreToolUse Write|Edit when beads is selected', () => {
+    const settings = generateClaudeSettings(tsFrontendConfig)
+    const writeEntry = (settings.hooks.PreToolUse ?? []).find((e) => e.matcher === 'Write|Edit')
+    expect(writeEntry?.hooks.some((h) => h.command.includes('require-swarm.sh'))).toBe(true)
+  })
+
+  it('omits require-swarm.sh when beads is not selected', () => {
+    const cfg: DevConfig = { ...tsFrontendConfig, tools: [] }
+    const settings = generateClaudeSettings(cfg)
+    const writeEntry = (settings.hooks.PreToolUse ?? []).find((e) => e.matcher === 'Write|Edit')
+    expect(writeEntry?.hooks.some((h) => h.command.includes('require-swarm.sh'))).toBe(false)
+  })
+
   it('emits verifier-loop.md when beads tool is selected', () => {
     const rules = generateRules(tsFrontendConfig, TEMPLATES_DIR)
     const verifier = rules.find((r) => r.filename === 'verifier-loop.md')

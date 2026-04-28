@@ -94,7 +94,9 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
         {
           matcher: 'Write|Edit',
           hooks: [
-            ...(beadsEnabled ? [hook('require-claim.sh', 5)] : []),
+            ...(beadsEnabled
+              ? [hook('require-claim.sh', 5), hook('require-swarm.sh', 5)]
+              : []),
             ...(config.language === 'typescript'
               ? [hook('ts-style-guard.sh', 30), hook('import-validator.sh', 10)]
               : []),
