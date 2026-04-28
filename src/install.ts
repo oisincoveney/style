@@ -21,7 +21,11 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as p from '@clack/prompts'
 import type { DevConfig } from './config.js'
-import { applyManagedFiles, type ApplyManagedFilesResult } from './manifest.js'
+import {
+  applyManagedFiles,
+  type ApplyManagedFilesResult,
+  seedManifestFromKnownFiles,
+} from './manifest.js'
 import type { Answers } from './prompts.js'
 import { buildClaudeMdBundle } from './generate/markdown.js'
 import { generateClaudeSettings } from './generate/claude-settings.js'
@@ -71,6 +75,10 @@ export async function installAll(
   // ─── File generation ────────────────────────────────────────────────
 
   if (config.targets.includes('claude')) {
+    const seed = seedManifestFromKnownFiles(cwd, getPackageVersion())
+    if (seed.seeded) {
+      log(`seeded manifest from ${seed.fileCount} prior-version files`)
+    }
     const managedFiles = gatherClaudeHooks()
     installResult.manifest = applyManagedFiles(cwd, {
       version: getPackageVersion(),

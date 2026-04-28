@@ -6,8 +6,10 @@ import {
   applyManagedFiles,
   classifyDrift,
   hashFile,
+  KNOWN_07X_FILES,
   type Manifest,
   readManifest,
+  seedManifestFromKnownFiles,
   writeManifest,
 } from '../manifest.js'
 
@@ -353,5 +355,72 @@ describe('applyManagedFiles', () => {
       mode: 'update',
     })
     expect(result2.devNew).toEqual([])
+  })
+})
+
+describe('seedManifestFromKnownFiles', () => {
+  let dir: string
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'seed-test-'))
+  })
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('seeds the manifest from the currently-on-disk subset of KNOWN_07X_FILES', () => {
+    const fs = require('node:fs')
+    fs.mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    fs.writeFileSync(join(dir, '.claude/hooks/banned-words-guard.sh'), 'echo banned')
+    fs.writeFileSync(join(dir, '.claude/hooks/destructive-command-guard.sh'), 'echo destructive')
+    const result = seedManifestFromKnownFiles(dir, '0.8.0')
+    expect(result.seeded).toBe(true)
+    expect(result.fileCount).toBe(2)
+    const m = readManifest(dir)
+    expect(m?.version).toBe('0.8.0')
+    expect(m?.files['.claude/hooks/banned-words-guard.sh']).toBeDefined()
+    expect(m?.files['.claude/hooks/destructive-command-guard.sh']).toBeDefined()
+  })
+
+  it('uses the file CURRENT content as the authoritative hash', () => {
+    const fs = require('node:fs')
+    fs.mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    fs.writeFileSync(join(dir, '.claude/hooks/banned-words-guard.sh'), 'user-customized')
+    seedManifestFromKnownFiles(dir, '0.8.0')
+    const m = readManifest(dir)
+    const expectedHash = hashFile(join(dir, '.claude/hooks/banned-words-guard.sh'))
+    expect(m?.files['.claude/hooks/banned-words-guard.sh']?.sha256).toBe(expectedHash)
+  })
+
+  it('is a no-op when manifest already exists', () => {
+    writeManifest(dir, { version: '0.8.0', files: {} })
+    const result = seedManifestFromKnownFiles(dir, '0.8.0')
+    expect(result.seeded).toBe(false)
+    expect(result.fileCount).toBe(0)
+  })
+
+  it('returns seeded=false when no known 0.7.x files are on disk', () => {
+    const result = seedManifestFromKnownFiles(dir, '0.8.0')
+    expect(result.seeded).toBe(false)
+    expect(result.fileCount).toBe(0)
+    expect(readManifest(dir)).toBeNull()
+  })
+
+  it('skips files that are missing on disk (only seeds what exists)', () => {
+    const fs = require('node:fs')
+    fs.mkdirSync(join(dir, '.claude/hooks'), { recursive: true })
+    fs.writeFileSync(join(dir, '.claude/hooks/banned-words-guard.sh'), 'banned')
+    seedManifestFromKnownFiles(dir, '0.8.0')
+    const m = readManifest(dir)
+    const fileKeys = Object.keys(m?.files ?? {})
+    expect(fileKeys).toEqual(['.claude/hooks/banned-words-guard.sh'])
+  })
+
+  it('KNOWN_07X_FILES is a non-empty list of .claude/hooks/ paths', () => {
+    expect(KNOWN_07X_FILES.length).toBeGreaterThan(10)
+    for (const p of KNOWN_07X_FILES) {
+      expect(p.startsWith('.claude/hooks/')).toBe(true)
+    }
   })
 })

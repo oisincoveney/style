@@ -235,6 +235,74 @@ function hashContent(content: string): string {
   return createHash('sha256').update(content).digest('hex')
 }
 
+/**
+ * Files we know 0.7.x shipped via templates/hooks/. Used by `seedManifestFromKnownFiles`
+ * to construct a manifest on the first 0.8.0 install over a 0.7.x project, so later
+ * applyManagedFiles calls can run drift detection against authoritative hashes.
+ *
+ * Adding to this list represents a claim about what prior versions shipped. When we
+ * retire a file in 0.8.x and beyond, its presence in the prior manifest is what
+ * triggers removal — so the seed must include the files we want to be able to retire
+ * cleanly in subsequent versions.
+ */
+export const KNOWN_07X_FILES: ReadonlyArray<string> = [
+  '.claude/hooks/ai-antipattern-guard.sh',
+  '.claude/hooks/audit-log.sh',
+  '.claude/hooks/banned-words-guard.sh',
+  '.claude/hooks/baseline-compare.sh',
+  '.claude/hooks/baseline-pin.sh',
+  '.claude/hooks/block-coauthor.sh',
+  '.claude/hooks/block-todowrite.sh',
+  '.claude/hooks/citation-check.sh',
+  '.claude/hooks/context-bootstrap.sh',
+  '.claude/hooks/context-injector.sh',
+  '.claude/hooks/destructive-command-guard.sh',
+  '.claude/hooks/docs-first.sh',
+  '.claude/hooks/import-validator.sh',
+  '.claude/hooks/post-edit-check.sh',
+  '.claude/hooks/pr-size-check.sh',
+  '.claude/hooks/pre-compact-prime.sh',
+  '.claude/hooks/pre-stop-verification.sh',
+  '.claude/hooks/require-claim.sh',
+  '.claude/hooks/statusline.sh',
+  '.claude/hooks/tdd-guard.sh',
+  '.claude/hooks/ts-style-guard.sh',
+]
+
+export interface SeedResult {
+  seeded: boolean
+  fileCount: number
+}
+
+/**
+ * Seed a manifest from currently-on-disk files we know 0.7.x shipped, using the
+ * file's CURRENT content as the authoritative hash. Idempotent: if a manifest
+ * already exists, this is a no-op. Intended to run once during the 0.7.x → 0.8.0
+ * upgrade path so applyManagedFiles can detect drift on subsequent updates.
+ */
+export function seedManifestFromKnownFiles(cwd: string, version: string): SeedResult {
+  if (readManifest(cwd) !== null) {
+    return { seeded: false, fileCount: 0 }
+  }
+
+  const files: Record<string, ManifestEntry> = {}
+  for (const relPath of KNOWN_07X_FILES) {
+    const absPath = join(cwd, relPath)
+    const sha256 = hashFile(absPath)
+    if (sha256 !== null) {
+      files[relPath] = { sha256 }
+    }
+  }
+
+  const fileCount = Object.keys(files).length
+  if (fileCount === 0) {
+    return { seeded: false, fileCount: 0 }
+  }
+
+  writeManifest(cwd, { version, files })
+  return { seeded: true, fileCount }
+}
+
 const MANIFEST_REL_PATH = '.claude/.dev-manifest.json'
 
 export interface ManifestEntry {
