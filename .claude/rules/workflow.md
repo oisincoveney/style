@@ -3,8 +3,10 @@ name: workflow
 description: Workflow methodology for this project
 ---
 
-# Workflow: Lightweight Specs
+# Workflow: Lightweight
 
-For any task larger than a single-file change, create a spec in `.claude/specs/YYYY-MM-DD-<slug>.md` using the template. The spec must have explicit success criteria before implementation begins.
+For any task larger than a single-file change, write down explicit success
+criteria before implementation begins. Reference the criteria in commits.
 
-Reference the spec in commits: "Implements per specs/YYYY-MM-DD-<slug>.md".
+If beads is enabled, switch `workflow` to `bd` in `.dev.config.json` to
+get the full bd-native loop.
