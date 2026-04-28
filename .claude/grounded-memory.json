@@ -1,6 +1,11 @@
 {
   "version": 2,
   "loopPatterns": {
+    "75837901": {
+      "preview": "Bash({\"command\":\"grep -ri \\\"scope-guard\\\\|scopeGuard\\\\|grounded\\\")",
+      "count": 1,
+      "lastSeen": 1777195769213
+    },
     "aa02b908": {
       "preview": "Read({\"file_path\":\"/Users/oisin/.bun/install/global/node_modules/)",
       "count": 1,
@@ -65,6 +70,71 @@
       "preview": "Bash({\"command\":\"bun run scripts/verify-grounded-install.ts 2>&1 )",
       "count": 1,
       "lastSeen": 1777123969979
+    },
+    "876a1451": {
+      "preview": "Read({\"file_path\":\"/Users/oisin/.bun/install/global/node_modules/)",
+      "count": 1,
+      "lastSeen": 1777195476097
+    },
+    "2f1bec4c": {
+      "preview": "Read({\"file_path\":\"/Users/oisin/.bun/install/global/node_modules/)",
+      "count": 1,
+      "lastSeen": 1777195480373
+    },
+    "5b060b23": {
+      "preview": "Read({\"file_path\":\"/Users/oisin/.claude/settings.json\"})",
+      "count": 1,
+      "lastSeen": 1777195700333
+    },
+    "5f124a4": {
+      "preview": "Bash({\"command\":\"cat package.json 2>/dev/null | head -40\",\"descri)",
+      "count": 1,
+      "lastSeen": 1777195769379
+    },
+    "b0d24b82": {
+      "preview": "Bash({\"command\":\"grep -n \\\"scope-guard\\\\|scopeGuard\\\" src/install)",
+      "count": 1,
+      "lastSeen": 1777195776131
+    },
+    "828a397": {
+      "preview": "Bash({\"command\":\"grep -n \\\"grounded\\\" src/install.ts scripts/veri)",
+      "count": 1,
+      "lastSeen": 1777195780255
+    },
+    "b15677c9": {
+      "preview": "Read({\"file_path\":\"/Users/oisin/dev/style-template/src/install.ts)",
+      "count": 1,
+      "lastSeen": 1777195805151
+    },
+    "89eaab31": {
+      "preview": "Bash({\"command\":\"grep -n \\\"grounded\\\\|scope\\\" src/update.ts 2>&1 )",
+      "count": 1,
+      "lastSeen": 1777195812738
+    },
+    "646c17b3": {
+      "preview": "Bash({\"command\":\"wc -l src/update.ts && head -50 src/update.ts\",\")",
+      "count": 1,
+      "lastSeen": 1777195813012
+    },
+    "7b4f65a8": {
+      "preview": "Read({\"file_path\":\"/Users/oisin/dev/style-template/src/install.ts)",
+      "count": 1,
+      "lastSeen": 1777196034005
+    },
+    "20c662e5": {
+      "preview": "Bash({\"command\":\"ls src/__tests__/ && grep -l \\\"grounded\\\\|instal)",
+      "count": 1,
+      "lastSeen": 1777196074554
+    },
+    "714b5af7": {
+      "preview": "Bash({\"command\":\"grep -n \\\"grounded\\\\|installGrounded\\\" src/__tes)",
+      "count": 1,
+      "lastSeen": 1777196078105
+    },
+    "2117240b": {
+      "preview": "Read({\"file_path\":\"/Users/oisin/dev/style-template/src/__tests__/)",
+      "count": 1,
+      "lastSeen": 1777196083437
     }
   },
   "editErrors": {}
