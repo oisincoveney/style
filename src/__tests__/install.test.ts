@@ -102,6 +102,16 @@ describe('installAll', () => {
     // CLAUDE.md + AGENTS.md
     expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true)
     expect(existsSync(join(dir, 'AGENTS.md'))).toBe(true)
+
+    // Vendored grill-me skill ships with MIT LICENSE preserved
+    expect(existsSync(join(dir, '.claude/skills/grill-me/SKILL.md'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/skills/grill-me/LICENSE'))).toBe(true)
+    const grillBody = readFileSync(join(dir, '.claude/skills/grill-me/SKILL.md'), 'utf8')
+    expect(grillBody).toContain('Interview me relentlessly')
+    expect(grillBody).toContain('Ask the questions one at a time.')
+    const grillLicense = readFileSync(join(dir, '.claude/skills/grill-me/LICENSE'), 'utf8')
+    expect(grillLicense).toContain('MIT License')
+    expect(grillLicense).toContain('Matt Pocock')
   })
 
   it('settings.json has valid JSON and correct structure', async () => {
