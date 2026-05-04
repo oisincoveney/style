@@ -11,7 +11,8 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import * as p from '@clack/prompts'
-import { type DevConfig, type Language, readConfig, writeConfig } from './config.js'
+import { type DevConfig, type Language, type PackageManager, readConfig, writeConfig } from './config.js'
+import { detectProject } from './detect.js'
 import {
   installAll,
   removeLegacyRetiredPaths,
@@ -20,7 +21,7 @@ import {
   trimBeadsIntegrationOnAgentDocs,
 } from './install.js'
 import type { DriftCandidate, DriftDecision } from './manifest.js'
-import { ALL_VARIANT_OPTIONS, promptVariants } from './prompts.js'
+import { ALL_VARIANT_OPTIONS, defaultCommandsFor, promptVariants } from './prompts.js'
 import type { ProjectVariant } from './skills.js'
 
 export async function runUpdate(): Promise<void> {
@@ -177,16 +178,119 @@ async function maybeReconfigureLanguages(cwd: string, config: DevConfig): Promis
     return false
   }
 
+  // Re-detect project state so a stale config (e.g. `language: "other"`,
+  // `packageManager: "other"`) gets fixed when the user finally declares the
+  // real languages. Detection reads lockfiles + Cargo.toml + go.mod + etc.
+  const detected = detectProject(cwd)
+  const primaryVariant = next[0]
+  const primaryLanguage = languageForVariant(primaryVariant)
+  const newPackageManager = resolvePackageManager(
+    config.packageManager,
+    detected.packageManager,
+    primaryLanguage,
+  )
+
   const updated: DevConfig = {
     ...config,
-    variant: next[0],
-    language: languageForVariant(next[0]),
+    variant: primaryVariant,
+    language: primaryLanguage,
     variants: next,
     languages: uniqueLanguages(next),
+    packageManager: newPackageManager,
+    framework: framework(config.framework, primaryVariant),
+    commands: fillMissingCommands(config.commands, primaryVariant, newPackageManager, detected),
   }
   writeConfig(cwd, updated)
   Object.assign(config, updated)
   return true
+}
+
+/**
+ * Choose the right packageManager. If the existing one is meaningful for the
+ * primary language, keep it (e.g. user picked pnpm over bun). If it's the
+ * placeholder "other" or doesn't fit the new primary language, prefer
+ * detection (lockfile-based) and fall back to a sensible default.
+ */
+function resolvePackageManager(
+  existing: PackageManager,
+  detected: PackageManager | null,
+  primaryLanguage: Language,
+): PackageManager {
+  const fitsPrimary = pmFitsLanguage(existing, primaryLanguage)
+  if (fitsPrimary && existing !== 'other') return existing
+  if (detected !== null && detected !== 'other') return detected
+  return defaultPmForLanguage(primaryLanguage)
+}
+
+function pmFitsLanguage(pm: PackageManager, lang: Language): boolean {
+  switch (lang) {
+    case 'typescript':
+      return pm === 'bun' || pm === 'pnpm' || pm === 'yarn' || pm === 'npm'
+    case 'rust':
+      return pm === 'cargo'
+    case 'go':
+      return pm === 'go'
+    case 'swift':
+      return pm === 'swift'
+    case 'other':
+      return pm === 'other'
+  }
+}
+
+function defaultPmForLanguage(lang: Language): PackageManager {
+  switch (lang) {
+    case 'typescript':
+      return 'bun'
+    case 'rust':
+      return 'cargo'
+    case 'go':
+      return 'go'
+    case 'swift':
+      return 'swift'
+    case 'other':
+      return 'other'
+  }
+}
+
+/**
+ * Clear the framework field when it no longer matches the new primary variant
+ * (e.g. user switches from ts-frontend → ts-library, where "react" no longer
+ * applies). For variants that take a framework, leave the existing value alone
+ * — update is non-interactive, so we'd rather keep a possibly-correct value
+ * than blank it out.
+ */
+function framework(existing: string | null, primary: ProjectVariant): string | null {
+  const variantTakesFramework =
+    primary === 'ts-frontend' ||
+    primary === 'ts-fullstack' ||
+    primary === 'ts-backend' ||
+    primary === 'swift-app'
+  if (!variantTakesFramework) return null
+  return existing
+}
+
+/**
+ * Fill in any null/empty command with the variant's defaults. Existing
+ * non-empty commands are preserved — the user has set them deliberately.
+ */
+function fillMissingCommands(
+  existing: DevConfig['commands'],
+  primary: ProjectVariant,
+  pm: PackageManager,
+  detected: ReturnType<typeof detectProject>,
+): DevConfig['commands'] {
+  const defaults = defaultCommandsFor(primary, pm, detected)
+  const pick = (cur: string | null | undefined, fallback: string | null): string | null =>
+    typeof cur === 'string' && cur.length > 0 ? cur : fallback
+  return {
+    dev: pick(existing.dev, defaults.dev),
+    build: pick(existing.build, defaults.build),
+    test: pick(existing.test, defaults.test),
+    typecheck: pick(existing.typecheck, defaults.typecheck),
+    lint: pick(existing.lint, defaults.lint),
+    format: pick(existing.format, defaults.format),
+    ...(existing.e2e !== undefined ? { e2e: existing.e2e } : {}),
+  }
 }
 
 function pickArgValue(argv: string[], name: string): string | null {
