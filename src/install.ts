@@ -1138,6 +1138,15 @@ type HookEntry = { matcher?: string; hooks: { type: string; command: string; tim
  * survive the merge. */
 const RETIRED_HOOK_SCRIPTS = new Set(['verify-grounding.sh'])
 
+/** Per-event raw hook commands that should be pruned on update. The harness
+ * once registered `bd prime` on SessionStart, but the beads marketplace
+ * plugin now provides the same hook — running both fires bd prime twice and
+ * wastes ~3K tokens per cold start. Only SessionStart is pruned so that
+ * user-added bd prime hooks on other events (e.g. PreCompact) survive. */
+const RETIRED_HOOK_COMMANDS_BY_EVENT: Record<string, Set<string>> = {
+  SessionStart: new Set(['bd prime']),
+}
+
 /** Extracts the .claude/hooks/foo.sh filename from a hook command, regardless of prefix. */
 function extractHookScript(command: string): string | null {
   const match = command.match(/\.claude\/hooks\/([^\s'"]+)/)
@@ -1147,12 +1156,15 @@ function extractHookScript(command: string): string | null {
 function pruneRetiredHooks(hooks: Record<string, HookEntry[]>): Record<string, HookEntry[]> {
   const result: Record<string, HookEntry[]> = {}
   for (const [event, entries] of Object.entries(hooks)) {
+    const retiredCommands = RETIRED_HOOK_COMMANDS_BY_EVENT[event]
     const filteredEntries = entries
       .map((entry) => ({
         ...entry,
         hooks: entry.hooks.filter((h) => {
           const script = extractHookScript(h.command)
-          return script === null || !RETIRED_HOOK_SCRIPTS.has(script)
+          if (script !== null && RETIRED_HOOK_SCRIPTS.has(script)) return false
+          if (retiredCommands && retiredCommands.has(h.command.trim())) return false
+          return true
         }),
       }))
       .filter((entry) => entry.hooks.length > 0)
@@ -1306,11 +1318,19 @@ function writeOrMerge(path: string, managed: string, log: (msg: string) => void)
   }
   const existing = readFileSync(path, 'utf8')
   if (existing.includes(DEV_BLOCK_START)) {
-    // Replace existing managed block
+    // Replace ALL existing managed blocks (a single canonical block survives).
+    // Prior installs sometimes appended instead of replacing, so files in the
+    // wild can have 2+ blocks; collapse them on update.
     const re = new RegExp(
       `${escapeRegex(DEV_BLOCK_START)}[\\s\\S]*?${escapeRegex(DEV_BLOCK_END)}\n?`,
+      'g',
     )
-    const updated = existing.replace(re, wrapped)
+    let replaced = false
+    const updated = existing.replace(re, () => {
+      if (replaced) return ''
+      replaced = true
+      return wrapped
+    })
     writeFileSync(path, updated)
     log(`${path.split('/').pop()} (updated managed block)`)
   } else {
@@ -1329,8 +1349,14 @@ export function mergeManagedBlock(existing: string, managed: string): string {
   if (existing.includes(DEV_BLOCK_START)) {
     const re = new RegExp(
       `${escapeRegex(DEV_BLOCK_START)}[\\s\\S]*?${escapeRegex(DEV_BLOCK_END)}\n?`,
+      'g',
     )
-    return existing.replace(re, wrapped)
+    let replaced = false
+    return existing.replace(re, () => {
+      if (replaced) return ''
+      replaced = true
+      return wrapped
+    })
   }
   return `${wrapped}\n${existing}`
 }

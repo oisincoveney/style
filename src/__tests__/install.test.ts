@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DevConfig } from '../config.js'
 import {
   installAll,
+  mergeClaudeSettings,
+  mergeManagedBlock,
   removeLegacyRetiredPaths,
   stripLegacyConfigFields,
   trimBeadsIntegrationOnAgentDocs,
@@ -127,7 +129,7 @@ describe('installAll', () => {
     expect(verifierBody).toContain('fresh-context verifier')
     expect(verifierBody).toContain('PASS-WITH-FOLLOWUPS')
     expect(verifierBody).toContain('discovered-from')
-    expect(verifierBody).toContain('Forbidden actions')
+    expect(verifierBody).toContain('## Forbidden')
 
     // Parallel-tickets skill ships when beads is enabled
     expect(existsSync(join(dir, '.claude/skills/parallel-tickets/SKILL.md'))).toBe(true)
@@ -138,7 +140,7 @@ describe('installAll', () => {
     expect(parallelBody).toContain('isolation:')
     expect(parallelBody).toContain('Cap: 3 concurrent')
     expect(parallelBody).toContain('Failure isolation')
-    expect(parallelBody).toContain('do NOT auto-abort siblings')
+    expect(parallelBody).toContain("DON'T auto-abort siblings")
 
     // Vendored + forked to-bd-issues skill ships with MIT attribution
     expect(existsSync(join(dir, '.claude/skills/to-bd-issues/SKILL.md'))).toBe(true)
@@ -147,7 +149,7 @@ describe('installAll', () => {
     expect(toBdBody).toContain('tracer bullet')
     expect(toBdBody).toContain('bd create --graph')
     expect(toBdBody).toContain('NEEDS CLARIFICATION')
-    expect(toBdBody).toContain('do not write to bd')
+    expect(toBdBody).toContain("don't write to bd")
     const toBdLicense = readFileSync(join(dir, '.claude/skills/to-bd-issues/LICENSE'), 'utf8')
     expect(toBdLicense).toContain('Matt Pocock')
     expect(toBdLicense).toContain('derivative work')
@@ -275,6 +277,66 @@ describe('installAll', () => {
     expect(matches?.length).toBe(1)
     // User-added content preserved
     expect(second).toContain('My extra section')
+  })
+
+  it('collapses pre-existing duplicate managed blocks on merge', () => {
+    // CLAUDE.md files in the wild can have 2+ managed blocks because earlier
+    // installer versions appended instead of replacing. Update should leave
+    // exactly one block.
+    const start = '<!-- BEGIN @oisincoveney/dev managed block -->'
+    const end = '<!-- END @oisincoveney/dev managed block -->'
+    const dupe = `${start}\nold content v1\n${end}\n\n# user notes\n\n${start}\nold content v2\n${end}\n`
+
+    const merged = mergeManagedBlock(dupe, 'fresh content')
+
+    const startCount = (merged.match(/BEGIN @oisincoveney\/dev/g) ?? []).length
+    expect(startCount).toBe(1)
+    expect(merged).toContain('fresh content')
+    expect(merged).not.toContain('old content v1')
+    expect(merged).not.toContain('old content v2')
+    expect(merged).toContain('# user notes')
+  })
+
+  it('prunes orphaned `bd prime` SessionStart hook on settings merge', () => {
+    // Beads marketplace plugin provides its own SessionStart `bd prime` hook;
+    // older harness versions also wrote one to project settings, so bd prime
+    // fired twice (~3K tokens per cold start). Update should drop the
+    // project-level entry.
+    const existing = {
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [{ type: 'command', command: 'bd prime' }],
+            matcher: '',
+          },
+        ],
+      },
+    }
+    const generated = {
+      hooks: {
+        SessionStart: [
+          {
+            hooks: [
+              {
+                type: 'command',
+                command:
+                  'cd "$(git rev-parse --show-toplevel)" && .claude/hooks/context-bootstrap.sh',
+              },
+            ],
+          },
+        ],
+      },
+    }
+
+    const merged = mergeClaudeSettings(existing, generated) as {
+      hooks: { SessionStart: { hooks: { command: string }[] }[] }
+    }
+
+    const allCommands = merged.hooks.SessionStart.flatMap((entry) =>
+      entry.hooks.map((h) => h.command),
+    )
+    expect(allCommands.some((c) => c.trim() === 'bd prime')).toBe(false)
+    expect(allCommands.some((c) => c.includes('context-bootstrap.sh'))).toBe(true)
   })
 
   it('backs up existing lint configs to .user-backup before overwriting (manifest .user-backup, not legacy .dev-backup)', async () => {

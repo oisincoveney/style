@@ -5,73 +5,71 @@ description: How the agent verifies its own ticket work via a fresh-context suba
 
 # Verifier Loop
 
-Before `bd close`, the agent invokes a fresh-context **verifier subagent** to confirm the work meets the ticket's acceptance criteria. The verifier uses the `code-review` skill plus a diff-aware selection of additional skills, and any issues it finds outside the original AC become **new bd tickets** — not silent inline fixes.
+Before `bd close`, agent invoke fresh-context **verifier subagent** to confirm work meets ticket AC. Verifier use `code-review` + diff-aware extra skills. Issues outside original AC → **new bd tickets**, not silent inline fixes.
 
-## When to invoke
+## When
 
-Always, before `bd close`. Not optional. The main agent does not self-certify completion.
+Always, before `bd close`. Not optional. Main agent never self-certify.
 
-## How to invoke
+## How
 
-Spawn an Agent with `subagent_type=general-purpose` and a self-contained prompt that includes:
+Spawn Agent with `subagent_type=general-purpose`, self-contained prompt:
 
-1. The bd issue ID being verified.
-2. Instructions to re-read `bd show <id>` from scratch.
-3. The skill-loading protocol (see below).
-4. The output format (see below).
-5. Explicit forbidden actions (no `bd close`, no `bd update`, no source edits).
+1. bd issue ID being verified.
+2. Re-read `bd show <id>` from scratch.
+3. Skill-loading protocol (below).
+4. Output format (below).
+5. Forbidden: no `bd close`, no `bd update`, no source edits.
 
-## Skill loading protocol (verifier picks based on the diff)
+## Skill loading (verifier picks per diff)
 
 | Trigger | Skill |
 |---|---|
 | Always | `code-review` |
 | Always | `tech-debt` |
-| Multi-layer / cross-boundary changes | `architecture` |
+| Multi-layer / cross-boundary | `architecture` |
 | Test surfaces touched | `testing-strategy` |
-| Auth, input handling, secrets, parsing | `security-review` |
-| UI / frontend code touched | `accessibility` |
-| Hot-path code (renders, request handlers, loops) | `performance` |
+| Auth, input, secrets, parsing | `security-review` |
+| UI / frontend touched | `accessibility` |
+| Hot-path (renders, request handlers, loops) | `performance` |
 
-The verifier inspects `git diff` to decide which apply. It loads them via the `Skill` tool.
+Verifier inspect `git diff` to decide. Load via `Skill` tool.
 
-## Output format (structured)
-
-The verifier returns:
+## Output format
 
 ```
 ## Result: PASS | PASS-WITH-FOLLOWUPS | PARTIAL | FAIL
 
-### Per-criterion (against the EARS acceptance criteria)
-1. <criterion text> — PASS — <evidence with file:line>
-2. <criterion text> — FAIL — <evidence>
+### Per-criterion (against EARS AC)
+1. <criterion> — PASS — <evidence file:line>
+2. <criterion> — FAIL — <evidence>
 ...
 
 ### Verification commands
-- `<cmd>` — exit <N> — <one-line summary>
+- `<cmd>` — exit <N> — <one-line>
 
 ### Scope check
-- Edits stayed within `Files Likely Touched`: yes | no (list out-of-scope files)
+- Edits within `Files Likely Touched`: yes | no (list out-of-scope)
 
-### New tickets filed (for issues outside the original AC)
+### New tickets filed (issues outside original AC)
 - bd-XXX.YY — <title> — <reason>
 - ...
 ```
 
 **Aggregate rules:**
 
-- **PASS** — every criterion PASS, every verification command exited 0, scope respected, **zero new tickets filed**.
-- **PASS-WITH-FOLLOWUPS** — every criterion PASS for the original AC, but the verifier filed N new tickets for issues outside scope. The current ticket is shippable; the followups are next-up work.
-- **PARTIAL** — some criteria PASS but at least one FAIL or only partially satisfied.
-- **FAIL** — at least one criterion clearly unsatisfied OR a verification command exited non-zero.
+- **PASS** — every criterion PASS, every cmd exit 0, scope respected, **zero new tickets**.
+- **PASS-WITH-FOLLOWUPS** — every criterion PASS for original AC, verifier filed N new tickets outside scope. Ticket shippable; followups next-up.
+- **PARTIAL** — some criteria PASS but ≥1 FAIL or partial.
+- **FAIL** — ≥1 criterion unsatisfied OR cmd exit ≠0.
 
-## Filing new tickets (the self-repeating loop)
+## Filing new tickets (self-repeating loop)
 
-For any issue the verifier finds that is NOT in the original AC:
+Any issue NOT in original AC:
 
 ```bash
 bd create --type=task --priority=N --deps "discovered-from:<current-id>" \
-  --title="<concise issue summary>" --silent --body-file=- <<'EOF'
+  --title="<concise summary>" --silent --body-file=- <<'EOF'
 ## User story
 As <role> I want <fix> so that <benefit>.
 
@@ -85,27 +83,27 @@ As <role> I want <fix> so that <benefit>.
 - <cmd>
 
 ## Discovered-from
-Found during verification of <current-id> by the verifier subagent.
+Found during verification of <current-id> by verifier subagent.
 EOF
 ```
 
-These appear in `bd ready` and become the next-up work.
+Appear in `bd ready` as next-up.
 
-## Main-agent behavior on result
+## Main-agent action on result
 
 | Result | Action |
 |---|---|
 | **PASS** | `bd close <id> --reason "verified clean by /verify-spec"`. Then `bd ready` → claim next. |
-| **PASS-WITH-FOLLOWUPS** | `bd close <id> --reason "verified; filed N followups"`. The followups appear in `bd ready` next; the agent claims them automatically (continuing the loop) or surfaces them to the user. |
-| **PARTIAL** | DO NOT close. Append the verifier output as `bd note <id>`. Fix the failing items in-place. Re-invoke verifier. Repeat until PASS or PASS-WITH-FOLLOWUPS. |
+| **PASS-WITH-FOLLOWUPS** | `bd close <id> --reason "verified; filed N followups"`. Followups in `bd ready`; agent claims auto or surfaces to user. |
+| **PARTIAL** | DO NOT close. Append verifier output as `bd note <id>`. Fix failing items. Re-invoke verifier. Repeat until PASS / PASS-WITH-FOLLOWUPS. |
 | **FAIL** | Same as PARTIAL — DO NOT close, fix, re-verify. |
 
 ## Loop termination
 
-The loop stops when the verifier returns **clean PASS with zero new tickets** AND the bd ready queue (or the parent epic's ready queue) is empty. Until then, the main agent keeps claiming next-ups.
+Stops when verifier returns **clean PASS, zero new tickets** AND `bd ready` (or parent epic's queue) empty. Else main agent keeps claiming.
 
 ## Hard rules
 
-- **No self-verification.** The main agent NEVER decides on its own that the ticket is done. The verifier subagent is the only authority for `bd close`.
-- **No silent inline fixes.** If the verifier finds something outside the original AC, it files a ticket. It does NOT edit the code to "just fix it real quick."
-- **No `bd close` until PASS or PASS-WITH-FOLLOWUPS.** PARTIAL/FAIL means more work, not a softened close.
+- **No self-verification.** Main agent NEVER decides ticket done. Verifier subagent only authority for `bd close`.
+- **No silent inline fixes.** Outside-AC issue → file ticket. Don't "just fix it real quick."
+- **No `bd close` until PASS / PASS-WITH-FOLLOWUPS.** PARTIAL/FAIL = more work, not softened close.

@@ -29,7 +29,7 @@ export function buildClaudeKernel(config: DevConfig): string {
   const lines = [
     '# Project Instructions for AI Agents',
     '',
-    'This project is configured with @oisincoveney/dev. Hooks enforce most rules mechanically. Detailed rules live in `.claude/rules/` — Claude Code loads them automatically (always for unscoped rules, when matching files are read for path-scoped rules).',
+    'Configured with @oisincoveney/dev. Hooks enforce most rules mechanically. Detailed rules in `.claude/rules/` — Claude Code auto-loads (always for unscoped, on matching file read for path-scoped).',
     '',
     '## Critical Rules (always active)',
     '',
@@ -38,20 +38,20 @@ export function buildClaudeKernel(config: DevConfig): string {
   const criticalBullets: string[] = []
 
   if (config.tools.includes('beads')) {
-    criticalBullets.push('Use `bd` for ALL task tracking — TodoWrite is blocked by hook.')
+    criticalBullets.push('Use `bd` for ALL task tracking — TodoWrite blocked by hook.')
   }
   criticalBullets.push('Never run destructive commands without explicit user approval — blocked by hook.')
   criticalBullets.push('Read before editing; verify before claiming done.')
   criticalBullets.push(
-    'Confident wrong answers are worse than honest uncertainty. Say "I need to verify" and check.',
+    'Confident wrong > honest uncertain — false. Say "I need to verify", check.',
   )
-  criticalBullets.push('Treat user constraints as non-negotiable; do not reinterpret.')
-  criticalBullets.push('No follow-up questions like "Want me to...". If done, stop.')
+  criticalBullets.push('User constraints non-negotiable. Don\'t reinterpret.')
+  criticalBullets.push('No follow-up questions like "Want me to...". Done → stop.')
   criticalBullets.push(
-    'Do not write "this works", "this should work", or "done" without having run the test command and seen passing output. The Stop hook enforces this.',
+    'Don\'t write "this works"/"should work"/"done" without running test cmd + seeing pass. Stop hook enforces.',
   )
   criticalBullets.push(
-    'Ask one non-trivial question at a time — stacking multiple judgment-call questions is not OK.',
+    'One non-trivial question at a time. Stacking judgment-call questions = not OK.',
   )
 
   for (const b of criticalBullets) lines.push(`- ${b}`)
@@ -59,7 +59,7 @@ export function buildClaudeKernel(config: DevConfig): string {
   lines.push('## Detailed Rules')
   lines.push('')
   lines.push(
-    'See `.claude/rules/` for the full set. Topic files (`architecture.md`, `testing.md`, `ai-behavior.md`, etc.) load every session. Path-scoped files (`component-patterns.md`, `styling-ui.md`, `contract-driven.md`) load only when Claude reads matching files — editing a `.tsx` file pulls in the frontend rules automatically.',
+    'See `.claude/rules/` for full set. Topic files (`architecture.md`, `testing.md`, `ai-behavior.md`, etc.) load every session. Path-scoped (`component-patterns.md`, `styling-ui.md`, `contract-driven.md`) load only on matching file read — editing `.tsx` pulls frontend rules automatically.',
   )
   lines.push('')
 

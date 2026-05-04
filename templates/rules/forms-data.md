@@ -11,7 +11,7 @@ paths:
 
 # Forms & Data
 
-- Framework-native form handling + Zod (or effect/schema) validation
-- All APIs must be typed
-- Validate at system boundaries (user input, external APIs)
-- All user-facing strings must be i18n-ready
+- Framework-native form handling + Zod (or effect/schema) validation.
+- All APIs typed.
+- Validate at system boundaries (user input, external APIs).
+- All user-facing strings i18n-ready.

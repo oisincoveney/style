@@ -102,15 +102,15 @@ describe('skills registry', () => {
     const { resolve } = require('node:path') as typeof import('node:path')
     const body = readFileSync(resolve(__dirname, '..', '..', 'templates/rules/testing.md'), 'utf8')
     expect(body).toContain('Proof of work')
-    expect(body).toContain('the tests should pass')
+    expect(body).toContain('tests should pass')
   })
 
   it('ai-behavior rule source includes no-completion-claims rule', () => {
     const { readFileSync } = require('node:fs') as typeof import('node:fs')
     const { resolve } = require('node:path') as typeof import('node:path')
     const body = readFileSync(resolve(__dirname, '..', '..', 'templates/rules/ai-behavior.md'), 'utf8')
-    expect(body).toContain('No completion claims without proof')
-    expect(body).toContain('Stop hook checks the session transcript')
+    expect(body).toContain('No completion claim without proof')
+    expect(body).toContain('Stop hook checks transcript')
   })
 })
 
@@ -554,7 +554,7 @@ describe('generateRules', () => {
     expect(planning?.content).toContain('Grill me')
     expect(planning?.content).toContain('Just do it')
     expect(planning?.content).toContain('Defer')
-    expect(planning?.content).toContain('Never file an epic without explicit user approval')
+    expect(planning?.content).toContain('Never file epic without explicit user approval')
   })
 
   it('omits planning-ux.md when beads tool is not selected', () => {

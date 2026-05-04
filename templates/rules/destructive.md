@@ -5,7 +5,7 @@ description: Destructive command policy, approvals, co-author trailer ban
 
 # Destructive Operations
 
-The following are blocked by hooks. Never attempt them without explicit user approval:
+Blocked by hooks. Never attempt without explicit user approval:
 - `git reset --hard`
 - `git push --force` / `git push -f`
 - `git clean -f`
@@ -13,6 +13,6 @@ The following are blocked by hooks. Never attempt them without explicit user app
 - `DROP TABLE` / `DROP DATABASE`
 - `npm publish` / `yarn publish` / `bun publish` / `pnpm publish`
 
-For destructive operations the user has explicitly authorized, ask before each occurrence, not once for a session.
+User-authorized destructive ops: ask each occurrence, not once per session.
 
-**No Co-Authored-By**: Do not add `Co-Authored-By: Claude` to commit messages. Stripped automatically by hook.
+**No Co-Authored-By**: don't add `Co-Authored-By: Claude` to commits. Hook strips automatically.

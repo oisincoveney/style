@@ -5,20 +5,20 @@ description: How the agent tracks scope expansion during work — file a discove
 
 # Scope Discipline
 
-The current claim names what's in scope. Anything outside is **not** silent additional work — it's a separate ticket.
+Current claim name what in scope. Outside = separate ticket, not silent work.
 
-## The rule
+## Rule
 
-When the agent is mid-work on a claimed ticket and discovers that a fix or change requires touching a file **outside** the ticket's `## Files Likely Touched` list:
+Mid-work on claim, discover fix touch file outside ticket's `## Files Likely Touched`:
 
 1. Stop.
-2. File a discovered-from child ticket via `bd create`:
+2. File discovered-from child via `bd create`:
    ```bash
    bd create --type=task --priority=2 --deps "discovered-from:<current-id>" \
-     --title="<one-line description of the discovery>" \
+     --title="<one-line description>" \
      --silent --body-file=- <<'EOF'
    ## User story
-   As a developer working on <current-id>, I discovered that <issue> needs to be addressed in <file>.
+   As dev on <current-id>, found <issue> in <file>.
 
    ## Acceptance Criteria
    1. WHEN ... THE SYSTEM SHALL ...
@@ -30,42 +30,42 @@ When the agent is mid-work on a claimed ticket and discovers that a fix or chang
    - <cmd>
 
    ## Discovered-from
-   Surfaced during work on <current-id>: <one-paragraph context>.
+   Surfaced during <current-id>: <context>.
    EOF
    ```
-3. Stay scoped. Continue working only on the originally-claimed ticket's files.
-4. The new ticket appears in `bd ready` as a follow-up.
+3. Stay scoped. Edit only originally-claimed files.
+4. New ticket lands in `bd ready` as followup.
 
-## What counts as "out of scope"
+## Out of scope
 
-- Editing a file not in the current ticket's `Files Likely Touched`.
-- Refactoring nearby code that "would be nice."
-- Fixing an unrelated bug noticed in passing.
-- Adding tests for code that was outside the ticket's intent.
-- Deleting an obsolete file the ticket didn't say to delete.
+- Edit file not in `Files Likely Touched`.
+- Refactor nearby "would be nice" code.
+- Fix unrelated bug noticed in passing.
+- Test code outside ticket intent.
+- Delete obsolete file ticket didn't name.
 
-## What does NOT need a discovered-from ticket
+## Not out of scope (no ticket needed)
 
-- Test files (`*.test.*`, `*.spec.*`, `__tests__/`) for the in-scope code.
-- Config files (`.gitignore`, `package.json` deps) when the in-scope work requires it.
-- Docs (`README.md`, comments) updated to reflect the in-scope change.
-- Files Likely Touched expansion via small inference — if the ticket says "src/auth/" and you find `src/auth/middleware.ts`, that's still in scope.
+- Test files (`*.test.*`, `*.spec.*`, `__tests__/`) for in-scope code.
+- Config (`.gitignore`, `package.json` deps) required by in-scope work.
+- Docs (`README.md`, comments) reflecting in-scope change.
+- Files Likely Touched small inference — ticket says "src/auth/", `src/auth/middleware.ts` still in scope.
 
-When in doubt, file the discovered-from ticket. The cost of overcounting is one extra issue; the cost of undercounting is silent scope creep.
+Doubt → file ticket. Overcount = one extra issue. Undercount = silent scope creep.
 
-## Why mechanical enforcement is hard (and why this rule matters)
+## Why no mechanical block
 
-Pre-edit blocking on scope violations would require parsing the issue body and comparing against the file path being edited. We don't do that — too many false positives, too brittle. Instead:
+Pre-edit blocking on scope violations require parsing issue body + comparing file path. Too many false positives, too brittle. Instead:
 
-- This rule is the soft commitment the agent should follow.
-- The audit-log post-check (`bun run scripts/check-scope-drift.ts`) catches violations after the fact: parses `.claude/audit.jsonl`, finds Edit/Write events targeting files outside the active ticket's Files Likely Touched, and reports them. Run periodically.
+- This rule = soft commit.
+- Audit post-check (`bun run scripts/check-scope-drift.ts`) catch after fact: parse `.claude/audit.jsonl`, find Edit/Write outside active ticket's Files Likely Touched. Run periodically.
 
-## When `/discover` exists as a slash command
+## `/discover` slash command
 
-If the project ships a `/discover <description>` slash command, the agent invokes that for the same effect — it wraps the `bd create --deps=discovered-from` call. Both paths are equivalent; behavioral rule + slash command are different surfaces for the same intent.
+If project ships `/discover <description>`, agent invoke that — wraps `bd create --deps=discovered-from`. Both paths equivalent.
 
 ## Hard rules
 
-- Never silently fix something outside the claim's scope.
-- Never expand the current ticket's scope by editing the issue body to add files. The claim is locked at claim time.
-- Always file the discovered-from ticket BEFORE making the out-of-scope edit, not after.
+- Never silently fix outside claim scope.
+- Never expand current ticket scope by editing body to add files. Claim locked at claim time.
+- Always file discovered-from BEFORE out-of-scope edit, not after.
