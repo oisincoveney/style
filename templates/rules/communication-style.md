@@ -1,3 +1,8 @@
+---
+name: communication-style
+description: Default communication style — invoke caveman skill at session start
+---
+
 # Communication Style
 
 Default communication style for this project is the `caveman` skill (vendored at `.claude/skills/caveman/`).
