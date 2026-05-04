@@ -173,14 +173,11 @@ async function maybeReconfigureLanguages(cwd: string, config: DevConfig): Promis
     process.exit(1)
   }
 
-  if (sameVariants(current, next)) {
-    p.log.info('Languages unchanged.')
-    return false
-  }
-
-  // Re-detect project state so a stale config (e.g. `language: "other"`,
-  // `packageManager: "other"`) gets fixed when the user finally declares the
-  // real languages. Detection reads lockfiles + Cargo.toml + go.mod + etc.
+  // Whenever the user passes a language flag we re-run detection — even if
+  // the variants list happens to be unchanged. The most common reason to
+  // re-run with the same list is to repair a stale config where
+  // `packageManager` is "other" or commands are null.
+  const variantsChanged = !sameVariants(current, next)
   const detected = detectProject(cwd)
   const primaryVariant = next[0]
   const primaryLanguage = languageForVariant(primaryVariant)
@@ -200,9 +197,19 @@ async function maybeReconfigureLanguages(cwd: string, config: DevConfig): Promis
     framework: framework(config.framework, primaryVariant),
     commands: fillMissingCommands(config.commands, primaryVariant, newPackageManager, detected),
   }
+  // No-op write avoidance: only return false (and skip the success log) when
+  // nothing actually changed at the byte level.
+  if (configEquals(config, updated)) {
+    if (!variantsChanged) p.log.info('Languages and detected fields unchanged.')
+    return false
+  }
   writeConfig(cwd, updated)
   Object.assign(config, updated)
   return true
+}
+
+function configEquals(a: DevConfig, b: DevConfig): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
 }
 
 /**
