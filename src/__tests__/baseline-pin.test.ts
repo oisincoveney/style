@@ -2,7 +2,14 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Each test does 5–10 git invocations + a bash hook subprocess. Under
+// concurrent vitest workers the per-process overhead grows past vitest's
+// default 5s testTimeout (the file passes in isolation in ~1s/test, but
+// under full-suite load the same test can drift to 6s+). 15s is the same
+// budget worktree-stop-guard.test.ts uses for the same reason.
+vi.setConfig({ testTimeout: 15_000 })
 
 const PIN_HOOK = resolve(__dirname, '..', '..', 'templates', 'hooks', 'baseline-pin.sh')
 const COMPARE_HOOK = resolve(__dirname, '..', '..', 'templates', 'hooks', 'baseline-compare.sh')
@@ -16,12 +23,29 @@ const canRun = hasCmd('bash') && hasCmd('jq') && hasCmd('git')
 
 function runHook(hookPath: string, cwd: string): { status: number; stderr: string; stdout: string } {
   const input = JSON.stringify({ cwd })
-  const result = spawnSync('bash', [hookPath], { input, encoding: 'utf8' })
+  // baseline-pin.sh runs git internally (rev-parse, status, checkout). Inherit
+  // GIT_CONFIG_PARAMETERS so those git invocations also bypass the user's
+  // global hooks — same reasoning as the `git()` helper above.
+  const result = spawnSync('bash', [hookPath], {
+    input,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'" },
+  })
   return { status: result.status ?? -1, stderr: result.stderr, stdout: result.stdout }
 }
 
 function git(cwd: string, ...args: string[]): { status: number; stdout: string; stderr: string } {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8' })
+  // Neutralise the user's global core.hooksPath for this invocation.
+  // bd installs a global pre-commit hook (~/.git-hooks/pre-commit -> bd hooks run)
+  // that grabs the dolt DB lock. With the suite running many tests in parallel,
+  // contention on that lock pushes individual git commits past vitest's 5s
+  // per-test timeout. The hook adds no value here — these are throwaway tmp
+  // repos with no .beads/ — so we just disable global hooks for the subprocess.
+  const r = spawnSync('git', args, {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, GIT_CONFIG_PARAMETERS: "'core.hooksPath=/dev/null'" },
+  })
   return { status: r.status ?? -1, stdout: r.stdout, stderr: r.stderr }
 }
 
