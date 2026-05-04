@@ -69,3 +69,9 @@ If project ships `/discover <description>`, agent invoke that — wraps `bd crea
 - Never silently fix outside claim scope.
 - Never expand current ticket scope by editing body to add files. Claim locked at claim time.
 - Always file discovered-from BEFORE out-of-scope edit, not after.
+
+## See also
+
+- `tracer-bullet.md` — what counts as the epic's tracer; sibling-scope discipline
+- `dsl.md` — `out_of_scope[]` field on epics names what's deliberately excluded
+- `plan-brief-flow.md` — two-stage approval gate

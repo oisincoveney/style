@@ -200,8 +200,119 @@ describe('installAll', () => {
     // /spec is the legacy command — replaced by /epic when beads is enabled
     expect(existsSync(join(dir, '.claude/commands/spec.md'))).toBe(false)
 
+    // Planning-gate slash commands exist when beads is enabled
+    expect(existsSync(join(dir, '.claude/commands/approve.md'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/commands/reject.md'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/commands/regrill.md'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/commands/plan-status.md'))).toBe(true)
+
+    // /approve writes the env-var marker (slash-command-only namespace)
+    const approve = readFileSync(join(dir, '.claude/commands/approve.md'), 'utf8')
+    expect(approve).toContain('OISIN_DEV_PLAN_APPROVE=1')
+    expect(approve).toContain('plan-approved:')
+    expect(approve).toContain('bd human dismiss')
+
     // Hook file for statusLine copied
     expect(existsSync(join(dir, '.claude/hooks/statusline.sh'))).toBe(true)
+  })
+
+  it('ships the planning-gate hooks, skill, rules, and rubric when beads is enabled', async () => {
+    await installAll(dir, fakeConfig, fakeAnswers, { skipSideEffects: true })
+
+    // Hooks
+    expect(existsSync(join(dir, '.claude/hooks/bd-create-gate.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/hooks/plan-approval-guard.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/hooks/bd-remember-protect.sh'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/hooks/swarm-digest.sh'))).toBe(true)
+
+    // Plan-brief skill
+    expect(existsSync(join(dir, '.claude/skills/plan-brief/SKILL.md'))).toBe(true)
+    const planBrief = readFileSync(join(dir, '.claude/skills/plan-brief/SKILL.md'), 'utf8')
+    expect(planBrief).toContain('Stage-1')
+    expect(planBrief).toContain('bd human <epic-id>')
+    expect(planBrief).toContain("DON'T `bd create --graph --parent=<id>`")
+
+    // Rules
+    expect(existsSync(join(dir, '.claude/rules/dsl.md'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/rules/tracer-bullet.md'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/rules/plan-brief-flow.md'))).toBe(true)
+    expect(existsSync(join(dir, '.claude/rules/human-flag-discipline.md'))).toBe(true)
+
+    // DSL rule mentions the contract
+    const dsl = readFileSync(join(dir, '.claude/rules/dsl.md'), 'utf8')
+    expect(dsl).toContain('YAML frontmatter')
+    expect(dsl).toContain('out_of_scope')
+    expect(dsl).toContain('tracer: true')
+
+    // Rubric + DSL helpers copied to .beads/
+    expect(existsSync(join(dir, '.beads/ticket-rubric.json'))).toBe(true)
+    expect(existsSync(join(dir, '.beads/dsl/parse.mjs'))).toBe(true)
+    expect(existsSync(join(dir, '.beads/dsl/expand.mjs'))).toBe(true)
+    expect(existsSync(join(dir, '.beads/domain-map.example.json'))).toBe(true)
+
+    const rubric = JSON.parse(readFileSync(join(dir, '.beads/ticket-rubric.json'), 'utf8'))
+    expect(rubric.epic_alone.required).toContain('domain')
+    expect(rubric.epic_alone.required).toContain('out_of_scope')
+    expect(rubric.task_in_graph.required).toContain('files')
+    expect(rubric.task_in_graph.required).toContain('verify')
+  })
+
+  it('settings.json has planning-gate hooks in correct order', async () => {
+    await installAll(dir, fakeConfig, fakeAnswers, { skipSideEffects: true })
+    const settings = JSON.parse(readFileSync(join(dir, '.claude/settings.json'), 'utf8')) as {
+      hooks: {
+        PreToolUse: Array<{ matcher?: string; hooks: Array<{ command: string }> }>
+        Stop: Array<{ hooks: Array<{ command: string }> }>
+      }
+    }
+    const bashMatcher = settings.hooks.PreToolUse.find((e) => e.matcher === 'Bash')
+    expect(bashMatcher).toBeDefined()
+    const cmds = (bashMatcher?.hooks ?? []).map((h) => h.command)
+    const idx = (name: string) => cmds.findIndex((c) => c.includes(name))
+
+    // Required ordering: destructive → bd-remember-protect → plan-approval-guard → bd-create-gate → block-coauthor.
+    expect(idx('destructive-command-guard.sh')).toBeGreaterThanOrEqual(0)
+    expect(idx('bd-remember-protect.sh')).toBeGreaterThan(idx('destructive-command-guard.sh'))
+    expect(idx('plan-approval-guard.sh')).toBeGreaterThan(idx('bd-remember-protect.sh'))
+    expect(idx('bd-create-gate.sh')).toBeGreaterThan(idx('plan-approval-guard.sh'))
+    expect(idx('block-coauthor.sh')).toBeGreaterThan(idx('bd-create-gate.sh'))
+
+    // swarm-digest.sh registered on Stop
+    const stopCmds = settings.hooks.Stop.flatMap((e) => e.hooks.map((h) => h.command))
+    expect(stopCmds.some((c) => c.includes('swarm-digest.sh'))).toBe(true)
+  })
+
+  it('omits planning-gate hooks/skill/rules when beads is NOT selected', async () => {
+    const noBeadsConfig: DevConfig = {
+      ...fakeConfig,
+      tools: ['contract-driven'],
+      workflow: 'none',
+    }
+    const noBeadsAnswers: Answers = {
+      ...fakeAnswers,
+      tools: ['contract-driven'],
+      workflow: 'none',
+    }
+    await installAll(dir, noBeadsConfig, noBeadsAnswers, { skipSideEffects: true })
+
+    // Skill not shipped
+    expect(existsSync(join(dir, '.claude/skills/plan-brief'))).toBe(false)
+    // Rules not shipped
+    expect(existsSync(join(dir, '.claude/rules/dsl.md'))).toBe(false)
+    expect(existsSync(join(dir, '.claude/rules/tracer-bullet.md'))).toBe(false)
+    expect(existsSync(join(dir, '.claude/rules/plan-brief-flow.md'))).toBe(false)
+    // Slash commands not shipped
+    expect(existsSync(join(dir, '.claude/commands/approve.md'))).toBe(false)
+
+    // settings.json has no plan-approval-guard.sh in the Bash chain
+    const settings = JSON.parse(readFileSync(join(dir, '.claude/settings.json'), 'utf8')) as {
+      hooks: { PreToolUse: Array<{ matcher?: string; hooks: Array<{ command: string }> }> }
+    }
+    const bashMatcher = settings.hooks.PreToolUse.find((e) => e.matcher === 'Bash')
+    const cmds = (bashMatcher?.hooks ?? []).map((h) => h.command)
+    expect(cmds.some((c) => c.includes('plan-approval-guard.sh'))).toBe(false)
+    expect(cmds.some((c) => c.includes('bd-create-gate.sh'))).toBe(false)
+    expect(cmds.some((c) => c.includes('bd-remember-protect.sh'))).toBe(false)
   })
 
   it('rule files with paths frontmatter land in .claude/rules/ when the skill is selected', async () => {

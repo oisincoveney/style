@@ -31,7 +31,7 @@ Agent generate options from request + codebase. Genuinely ambiguous → fewer op
 
 ## Hard rules
 
-- **Never file epic without explicit user approval.** Agent draft EARS body + children in conversation, show draft, accept redirects. Only run `bd create --type=epic` after user sign-off.
+- **Never file epic+children unilaterally.** Two-stage flow: stage-1 epic-alone via `plan-brief` skill, `bd human` flag, halt. Stage-2 children only after `/approve`. See `plan-brief-flow.md`.
 - **Never invoke grill-me unilaterally.** Always menu choice. Agent thinks grilling helps → surface `Grill me`, let user pick.
 - **Never restructure user intent.** "Add Google OAuth" → menu about Google OAuth (callback URL, session storage, token refresh). NOT about GitHub or Apple unless user opens door.
 - **Don't ask "want me to…" followups.** Surface menu or take clear action. No follow-up question.
@@ -47,8 +47,8 @@ These → agent work directly, no menu.
 
 ## After choice
 
-- **Feature option** → draft epic body + children in conversation; show; accept redirects; user approves; `bd create`.
+- **Feature option** → invoke `plan-brief` skill (stage-1 epic-alone in beads + `bd human` flag + halt). User runs `/approve` after review → stage-2 children via `to-bd-issues`. NEVER `bd create --type=epic` followed by `bd create --graph` in same turn.
 - **`Grill me`** → invoke grill-me skill; resolve design tree; re-surface fresh menu (with grilled-shape options).
 - **`Chat about it`** → discuss; no bd writes until user moves to structural option.
-- **`Just do it`** → `bd create --type=task` with user intent as title; claim; work.
+- **`Just do it`** → `bd create --type=task` with user intent as title; claim; work. (Single-task path skips planning gate.)
 - **`Defer`** → `bd create --type=task --defer +<period>` with request as title; report ID; done.

@@ -19,6 +19,22 @@ Hard cap 3 parallel sub-agents. Token cost ~15× serial per [research](https://g
 
 ## Orchestration
 
+### 0. Re-verify approval gate
+
+Before fan-out, defense-in-depth check on parent epic approval state. The `plan-approval-guard.sh` hook already gated `bd swarm create`, but this skill re-asserts:
+
+```bash
+EPIC_HUMAN=$(bd show <epic-id> --json | jq -r '.human // false')
+[ "$EPIC_HUMAN" = "true" ] && { echo "epic has bd human flag — halt"; exit 1; }
+
+EPIC_DESC=$(bd show <epic-id> --json | jq -r '.description // ""')
+EPIC_SHA=$(printf '%s' "$EPIC_DESC" | shasum -a 256 | awk '{print $1}')
+bd memories "plan-approved:<epic-id>:$EPIC_SHA" | grep -q "plan-approved:<epic-id>:$EPIC_SHA" \
+  || { echo "epic body changed since approval — halt"; exit 1; }
+```
+
+Failure → halt, surface to user. Don't fan out unapproved or stale-approved graph.
+
 ### 1. Confirm swarm registered
 
 ```bash
@@ -108,10 +124,22 @@ Sub-agent returns FAIL/PARTIAL → capture message, DON'T auto-abort siblings. S
 Fan-out summary (N tickets):
   ✓ <id>: PASS — <subject>
   ✓ <id>: PASS-WITH-FOLLOWUPS (filed M discovered-from)
+  ⚑ <id>: PARTIAL — bd human filed
   ✗ <id>: FAIL — <reason>
 ```
 
+Worker pings user mid-flight ONLY for tracer-fail OR destructive-op-needed. Else files `bd human <id>` + continues. See `human-flag-discipline.md`.
+
 User decides on failures (re-claim, fix manually, escalate).
+
+### 6. Post fan-out digest to epic
+
+After all workers return, append summary to epic notes:
+```bash
+bd update <epic-id> --notes "$(date -u +%Y-%m-%dT%H:%M:%SZ): fan-out N tickets — <summary>"
+```
+
+`swarm-digest.sh` Stop hook surfaces aggregate to user automatically. This update augments the audit trail on the epic itself.
 
 ### 5. Worktree cleanup
 

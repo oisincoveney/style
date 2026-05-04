@@ -554,7 +554,8 @@ describe('generateRules', () => {
     expect(planning?.content).toContain('Grill me')
     expect(planning?.content).toContain('Just do it')
     expect(planning?.content).toContain('Defer')
-    expect(planning?.content).toContain('Never file epic without explicit user approval')
+    expect(planning?.content).toContain('Never file epic+children unilaterally')
+    expect(planning?.content).toContain('plan-brief-flow.md')
   })
 
   it('omits planning-ux.md when beads tool is not selected', () => {

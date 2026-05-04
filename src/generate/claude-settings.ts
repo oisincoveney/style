@@ -108,6 +108,13 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
           matcher: 'Bash',
           hooks: [
             hook('destructive-command-guard.sh', 5),
+            ...(beadsEnabled
+              ? [
+                  hook('bd-remember-protect.sh', 5),
+                  hook('plan-approval-guard.sh', 10),
+                  hook('bd-create-gate.sh', 10),
+                ]
+              : []),
             hook('block-coauthor.sh', 5),
           ],
         },
@@ -126,6 +133,7 @@ export function generateClaudeSettings(config: DevConfig): ClaudeSettings {
         {
           hooks: [
             hook('worktree-stop-guard.sh', 10),
+            ...(beadsEnabled ? [hook('swarm-digest.sh', 10)] : []),
             hook('pre-stop-verification.sh', 30),
             hook('baseline-compare.sh', 120),
             hook('citation-check.sh', 10),

@@ -52,6 +52,22 @@ export function generateRules(config: DevConfig, templatesDir: string): RuleFile
       filename: 'scope-discipline.md',
       content: readFileSync(resolve(templatesDir, 'rules', 'scope-discipline.md'), 'utf8'),
     })
+    files.push({
+      filename: 'dsl.md',
+      content: readFileSync(resolve(templatesDir, 'rules', 'dsl.md'), 'utf8'),
+    })
+    files.push({
+      filename: 'tracer-bullet.md',
+      content: readFileSync(resolve(templatesDir, 'rules', 'tracer-bullet.md'), 'utf8'),
+    })
+    files.push({
+      filename: 'plan-brief-flow.md',
+      content: readFileSync(resolve(templatesDir, 'rules', 'plan-brief-flow.md'), 'utf8'),
+    })
+    files.push({
+      filename: 'human-flag-discipline.md',
+      content: readFileSync(resolve(templatesDir, 'rules', 'human-flag-discipline.md'), 'utf8'),
+    })
   }
   if (config.contractDriven) {
     files.push({ filename: 'contract-driven.md', content: contractDrivenRule(config.language) })

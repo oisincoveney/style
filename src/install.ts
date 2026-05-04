@@ -312,6 +312,7 @@ export function gatherAllManagedFiles(ctx: GatherContext): Map<string, string> {
       out.delete('.claude/skills/to-bd-issues/LICENSE')
       out.delete('.claude/skills/spec-verifier/SKILL.md')
       out.delete('.claude/skills/parallel-tickets/SKILL.md')
+      out.delete('.claude/skills/plan-brief/SKILL.md')
       walkDirIntoMap(
         join(TEMPLATES_DIR, 'skills', 'to-bd-issues'),
         '.claude/skills/to-bd-issues',
@@ -325,6 +326,17 @@ export function gatherAllManagedFiles(ctx: GatherContext): Map<string, string> {
       walkDirIntoMap(
         join(TEMPLATES_DIR, 'skills', 'parallel-tickets'),
         '.claude/skills/parallel-tickets',
+        out,
+      )
+      walkDirIntoMap(
+        join(TEMPLATES_DIR, 'skills', 'plan-brief'),
+        '.claude/skills/plan-brief',
+        out,
+      )
+
+      walkDirIntoMap(
+        join(TEMPLATES_DIR, 'bd'),
+        '.beads',
         out,
       )
     } else {
@@ -620,7 +632,12 @@ function installProjectSkills(
  * These are always copied, regardless of superpower selection, because
  * they're referenced by the kernel CLAUDE.md.
  */
-const BD_ONLY_SKILLS = new Set<string>(['to-bd-issues', 'spec-verifier', 'parallel-tickets'])
+const BD_ONLY_SKILLS = new Set<string>([
+  'to-bd-issues',
+  'spec-verifier',
+  'parallel-tickets',
+  'plan-brief',
+])
 
 function installOwnedSkills(
   cwd: string,

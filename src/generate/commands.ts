@@ -25,6 +25,10 @@ export function generateCommands(config: DevConfig): CommandFile[] {
     files.push({ filename: 'research.md', content: researchCommand() })
     files.push({ filename: 'decision.md', content: decisionCommand() })
     files.push({ filename: 'verify-spec.md', content: verifySpecCommand() })
+    files.push({ filename: 'approve.md', content: approveCommand() })
+    files.push({ filename: 'reject.md', content: rejectCommand() })
+    files.push({ filename: 'regrill.md', content: regrillCommand() })
+    files.push({ filename: 'plan-status.md', content: planStatusCommand() })
   }
   files.push({ filename: 'commit.md', content: commitCommand() })
   files.push({ filename: 'explore.md', content: exploreCommand() })
@@ -397,6 +401,154 @@ Split the current working tree into logical commits. Never dump everything into 
 Stop before pushing. The user pushes when they're ready.
 
 If the diff is trivially one concern, one commit is fine — do not invent splits.
+`
+}
+
+function approveCommand(): string {
+  return `---
+description: Approve a planning-gate epic. Hashes the current body, records approval in bd memory, dismisses the bd human flag.
+disable-model-invocation: true
+allowed-tools: Bash(bd *) Bash(shasum *) Bash(printf *) Bash(awk *)
+---
+
+Approve epic \`$ARGUMENTS\` to unlock stage-2 child fan-out. The slash command is the ONLY way to write the \`plan-approved:\` namespace; \`bd-remember-protect.sh\` blocks agents calling \`bd remember\` directly.
+
+If \`$ARGUMENTS\` is empty, ask for an epic id and halt.
+
+Steps (run as one Bash invocation; the env-var marker must be inline):
+
+1. Read the epic body and hash it:
+
+   \`\`\`bash
+   EPIC_ID="$ARGUMENTS"
+   DESC=$(bd show "$EPIC_ID" --json | jq -r '.description // ""')
+   SHA=$(printf '%s' "$DESC" | shasum -a 256 | awk '{print $1}')
+   \`\`\`
+
+2. Record approval (env-var marker required by hook):
+
+   \`\`\`bash
+   OISIN_DEV_PLAN_APPROVE=1 bd remember "plan-approved:$EPIC_ID:$SHA"
+   \`\`\`
+
+3. Dismiss the bd human flag:
+
+   \`\`\`bash
+   bd human dismiss "$EPIC_ID" --reason="approved by user"
+   \`\`\`
+
+4. Echo back: \`Approved $EPIC_ID at $SHA. Stage-2 unlocked: agent may now run \\\`bd create --graph --parent=$EPIC_ID\\\`.\`
+
+If any step fails, surface the failure verbatim. Do not retry blindly.
+
+Do NOT modify the epic body in this command. If the body needs revision, use \`/regrill\`.
+`
+}
+
+function rejectCommand(): string {
+  return `---
+description: Reject a planning-gate epic. Closes the epic with reason and records the rejection cause for grill-me to seed next pass.
+disable-model-invocation: true
+allowed-tools: Bash(bd *)
+---
+
+Reject epic \`$ARGUMENTS\`. Closes the epic and writes a \`plan-rejected:\` memory entry that \`grill-me\` reads on its next invocation.
+
+Argument shape: \`<epic-id> <reason>\`. If empty, ask for both and halt. The reason is required.
+
+Steps:
+
+1. Parse the first token as epic id; rest is the reason.
+
+2. Close the epic:
+
+   \`\`\`bash
+   bd close "$EPIC_ID" --reason "$REASON"
+   \`\`\`
+
+3. Record the rejection (env-var marker required by hook):
+
+   \`\`\`bash
+   OISIN_DEV_PLAN_REJECT=1 bd remember "plan-rejected:$EPIC_ID:$REASON"
+   \`\`\`
+
+4. Echo back: \`Rejected $EPIC_ID. Reason recorded for grill-me. Run /grill-me to revise.\`
+`
+}
+
+function regrillCommand(): string {
+  return `---
+description: Re-flag a planning-gate epic for review. Drops prior approval, re-sets the bd human flag, optionally re-enters grill-me on a topic.
+disable-model-invocation: true
+allowed-tools: Bash(bd *)
+---
+
+Revise epic \`$ARGUMENTS\` (form: \`<epic-id> [<topic>]\`). Re-flags the epic for review and clears any prior \`plan-approved:\` memory so the body can be rewritten without leaving stale approvals.
+
+If \`$ARGUMENTS\` is empty, ask for at minimum an epic id and halt.
+
+Steps:
+
+1. Parse the first token as epic id; rest is the optional topic to re-grill.
+
+2. Re-flag for review:
+
+   \`\`\`bash
+   bd human "$EPIC_ID" --reason="plan-review (regrill)"
+   \`\`\`
+
+3. Drop prior approval entries (env-var marker required by hook):
+
+   \`\`\`bash
+   OISIN_DEV_PLAN_REGRILL=1 bd memories --delete "plan-approved:$EPIC_ID:" 2>/dev/null || true
+   \`\`\`
+
+   (\`bd memories --delete\` may not exist on older bd versions; fall through silently.)
+
+4. If a topic was given, invoke \`grill-me\` skill scoped to that topic. Otherwise, instruct the user to edit the epic body via \`bd update $EPIC_ID --description-file=- <<EOF ... EOF\` and then run \`/approve $EPIC_ID\`.
+
+5. Echo: \`Re-flagged $EPIC_ID. Prior approval dropped. Edit body or grill, then /approve.\`
+`
+}
+
+function planStatusCommand(): string {
+  return `---
+description: One-screen status of a planning-gate epic and its swarm — children, blocks, in_progress, human flags.
+disable-model-invocation: true
+allowed-tools: Bash(bd *)
+---
+
+Print a one-screen status for epic \`$ARGUMENTS\`.
+
+If \`$ARGUMENTS\` is empty, ask for an epic id and halt.
+
+Steps:
+
+1. Show the epic:
+
+   \`\`\`bash
+   bd show "$ARGUMENTS"
+   \`\`\`
+
+2. List its children with status:
+
+   \`\`\`bash
+   bd list --parent="$ARGUMENTS"
+   \`\`\`
+
+3. Compact summary:
+
+   \`\`\`bash
+   bd list --parent="$ARGUMENTS" --json | jq -r '
+     "closed: \\([.[] | select(.status == \\"closed\\")] | length)  ·  " +
+     "in_progress: \\([.[] | select(.status == \\"in_progress\\")] | length)  ·  " +
+     "blocked: \\([.[] | select(.status == \\"blocked\\")] | length)  ·  " +
+     "open: \\([.[] | select(.status == \\"open\\")] | length)  ·  " +
+     "human-flagged: \\([.[] | select(.human == true)] | length)"
+   '
+   \`\`\`
+
+4. Read-only. Do not mutate.
 `
 }
 
